@@ -1,0 +1,85 @@
+{
+  "name": "IIIT social",
+  "short_name": "IIIT social",
+  "description": "A Matrix client for IIIT communities",
+  "categories": ["social", "communication"],
+  "dir": "auto",
+  "lang": "en-US",
+  "display": "standalone",
+  "orientation": "portrait",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#fff",
+  "theme_color": "#fff",
+  "icons": [
+    {
+      "src": "/icons/web/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/web/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/web/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/web/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New room",
+      "short_name": "New room",
+      "description": "Create a new Matrix room",
+      "url": "/create",
+      "icons": [
+        {
+          "src": "/icons/web/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "short_name": "Inbox",
+      "description": "Open your Matrix notifications",
+      "url": "/inbox/notifications/",
+      "icons": [
+        {
+          "src": "/icons/web/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Direct messages",
+      "short_name": "Direct",
+      "description": "Open your direct messages",
+      "url": "/direct/",
+      "icons": [
+        {
+          "src": "/icons/web/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}

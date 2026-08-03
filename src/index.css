@@ -1,0 +1,370 @@
+@font-face {
+  font-family: Twemoji;
+  src: url('../public/font/Twemoji.Mozilla.v15.1.0.woff2'),
+    url('../public/font/Twemoji.Mozilla.v15.1.0.ttf');
+  font-display: swap;
+}
+
+:root {
+  --tc-link: hsl(213deg 100% 45%);
+
+  /* user mxid colors */
+  --mx-uc-1: hsl(208, 100%, 45%);
+  --mx-uc-2: hsl(302, 100%, 30%);
+  --mx-uc-3: hsl(163, 100%, 30%);
+  --mx-uc-4: hsl(343, 100%, 45%);
+  --mx-uc-5: hsl(24, 100%, 45%);
+  --mx-uc-6: hsl(181, 100%, 30%);
+  --mx-uc-7: hsl(242, 100%, 45%);
+  --mx-uc-8: hsl(94, 100%, 35%);
+
+  --font-emoji: 'Twemoji_DISABLED';
+  --font-secondary: 'InterVariable', var(--font-emoji), sans-serif;
+}
+
+.dark-theme,
+.butter-theme {
+  --tc-link: hsl(213deg 100% 80%);
+
+  --mx-uc-1: hsl(208, 100%, 75%);
+  --mx-uc-2: hsl(301, 100%, 80%);
+  --mx-uc-3: hsl(163, 100%, 70%);
+  --mx-uc-4: hsl(343, 100%, 75%);
+  --mx-uc-5: hsl(24, 100%, 70%);
+  --mx-uc-6: hsl(181, 100%, 60%);
+  --mx-uc-7: hsl(243, 100%, 80%);
+  --mx-uc-8: hsl(94, 100%, 80%);
+
+  --font-secondary: 'InterVariable', var(--font-emoji), sans-serif;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--font-secondary);
+  font-size: 16px;
+  font-weight: 400;
+  min-height: 100%;
+  overscroll-behavior: none;
+
+  /*Why font-variant-ligatures => https://github.com/rsms/inter/issues/222 */
+  font-variant-ligatures: no-contextual;
+}
+
+@keyframes matrix-soft-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+#portalContainer > * {
+  animation: matrix-soft-enter 140ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #portalContainer > * {
+    animation: none;
+  }
+}
+
+#root {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100%;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  flex-direction: column;
+}
+
+body[data-ui-option='matrix'] {
+  --ui-option-sidebar-width: 66px;
+  --ui-option-page-nav-width: 256px;
+}
+
+body[data-ui-option='matrix-android'] {
+  --ui-option-sidebar-width: 70px;
+  --ui-option-page-nav-width: 244px;
+  --ui-option-mobile-nav-height: 80px;
+}
+
+body[data-ui-option] [data-ui-option-sidebar] {
+  width: var(--ui-option-sidebar-width);
+}
+
+body[data-ui-option] [data-ui-option-page-nav] {
+  width: var(--ui-option-page-nav-width);
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-page-header] {
+  min-height: 56px;
+  padding-left: 16px;
+  padding-right: 16px;
+  background-color: color-mix(in srgb, currentColor 4%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-page-content] {
+  padding: 8px 12px 24px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-room-row] {
+  min-height: 64px;
+  margin-bottom: 0;
+  border-radius: 12px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-room-row-content] {
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-room-avatar] {
+  width: 40px;
+  height: 40px;
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+  border-radius: 12px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-room-avatar] svg {
+  width: 20px;
+  height: 20px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-room-preview] {
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-page-content] [data-category-id] {
+  margin: 12px 0 4px;
+  padding-left: 4px;
+  padding-right: 4px;
+  background-color: transparent;
+  border-radius: 0;
+  text-transform: none;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-page-content] [data-category-id] p {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0.1px;
+  text-transform: none;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-page-content] [data-category-id] svg {
+  width: 16px;
+  height: 16px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-page-header] button {
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 20px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-sidebar] button[aria-label] {
+  width: 48px;
+  min-width: 48px;
+  height: 32px;
+  min-height: 32px;
+  border: 0 !important;
+  border-radius: 16px;
+}
+
+body[data-ui-option='matrix-android'] [data-ui-option-sidebar] [data-sidebar-item-active='true'] {
+  transform: none;
+}
+
+body[data-ui-option='matrix-android']
+  [data-ui-option-sidebar]
+  [data-sidebar-item-active='true']
+  button[aria-label] {
+  background-color: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+@media (max-width: 749px) {
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-sidebar] {
+    position: fixed;
+    z-index: 10;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(var(--ui-option-mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background-color: color-mix(in srgb, currentColor 4%, transparent);
+    border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border-right: 0;
+    box-shadow: 0 -4px 16px color-mix(in srgb, currentColor 8%, transparent);
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-nav] {
+    width: 100%;
+    height: 100%;
+    flex-direction: row;
+    justify-content: space-around;
+    gap: 0;
+    padding: 8px 12px 4px;
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-nav] > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-tab] {
+    height: calc(var(--ui-option-mobile-nav-height) - 12px);
+    min-width: 0;
+    overflow: hidden;
+    text-align: center;
+    gap: 4px;
+    padding-top: 2px;
+    border-radius: 16px;
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-tab] > :first-child {
+    min-width: 0;
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-tab] > :first-child::before {
+    display: none;
+  }
+
+  body[data-ui-option='matrix-android']
+    [data-ui-option-mobile-tab]
+    [data-sidebar-item-active='true'] {
+    transform: none;
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-tab] button[aria-label] {
+    width: 64px;
+    min-width: 64px;
+    height: 32px;
+    min-height: 32px;
+    border: 0 !important;
+    border-radius: 16px;
+  }
+
+  body[data-ui-option='matrix-android']
+    [data-ui-option-mobile-tab]
+    [data-sidebar-item-active='true']
+    button[aria-label] {
+    background-color: color-mix(in srgb, currentColor 18%, transparent);
+  }
+
+  body[data-ui-option='matrix-android'] [data-ui-option-mobile-tab-label] {
+    color: color-mix(in srgb, currentColor 68%, transparent);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+  }
+
+  body[data-ui-option='matrix-android']
+    [data-sidebar-item-active='true']
+    + [data-ui-option-mobile-tab-label] {
+    color: currentColor;
+    font-weight: 600;
+  }
+
+  body[data-ui-option='matrix-android']
+    [data-ui-option-shell]:has([data-ui-option-mobile-sidebar]) {
+    padding-bottom: calc(var(--ui-option-mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@supports not (height: 100dvh) {
+  #root {
+    height: 100%;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  -webkit-tap-highlight-color: transparent;
+}
+a {
+  color: var(--tc-link);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+[data-mx-spoiler][aria-pressed='true'] a {
+  color: transparent;
+  pointer-events: none;
+}
+
+b {
+  font-weight: 500;
+}
+label {
+  margin: 0;
+  padding: 0;
+}
+button,
+textarea {
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  border: none;
+}
+button {
+  max-width: 100%;
+  text-transform: none;
+  text-align: inherit;
+  overflow: visible;
+  -webkit-appearance: button;
+}
+textarea,
+input,
+input[type],
+input[type='text'],
+input[type='username'],
+input[type='password'],
+input[type='email'],
+input[type='checkbox'] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+textarea {
+  color: inherit;
+  word-spacing: inherit;
+}
+
+audio:not([controls]) {
+  display: none !important;
+}
+
+/* Fix Firefox rendering lists that have empty items with those items collapsed in on eachother */
+li p::before {
+  content: '';
+  display: inline-block;
+}

@@ -1,0 +1,12 @@
+experiment
+dist
+node_modules
+devAssets
+
+.DS_Store
+.idea
+.vercel
+.env*
+
+.vercel
+.env*

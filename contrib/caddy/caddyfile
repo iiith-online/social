@@ -1,0 +1,6 @@
+# more info: https://caddyserver.com/docs/caddyfile/patterns#single-page-apps-spas
+matrix-iiit.domain.tld {
+  root * /path/to/matrix-iiit/dist
+  try_files {path} / index.html
+  file_server
+}
