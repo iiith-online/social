@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect } from 'react';
-import { Spinner, Text, color } from 'folds';
+import { Box, Header, Scroll, Spinner, Text, color } from 'folds';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import classNames from 'classnames';
+
 import { AuthFooter } from './AuthFooter';
-import '../../social/social.css';
+import * as css from './styles.css';
+import * as PatternsCss from '../../styles/Patterns.css';
 import { DEFAULT_HOMESERVER } from '../../hooks/useClientConfig';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import AppIcon from '../../../../public/icons/web/icon-512.png';
@@ -16,22 +19,22 @@ import { getLoginPath } from '../pathUtils';
 
 function AuthLayoutLoading({ message }: { message: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+    <Box justifyContent="Center" alignItems="Center" gap="200">
       <Spinner size="100" variant="Secondary" />
       <Text align="Center" size="T300">
         {message}
       </Text>
-    </div>
+    </Box>
   );
 }
 
 function AuthLayoutError({ message }: { message: string }) {
   return (
-    <div className="social-auth-error">
+    <Box justifyContent="Center" alignItems="Center" gap="200">
       <Text align="Center" style={{ color: color.Critical.Main }} size="T300">
         {message}
       </Text>
-    </div>
+    </Box>
   );
 }
 
@@ -52,7 +55,7 @@ export function AuthLayout({ redirectToServerPath = true }: AuthLayoutProps) {
         serverName,
         response,
       };
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
@@ -72,14 +75,22 @@ export function AuthLayout({ redirectToServerPath = true }: AuthLayoutProps) {
     discoveryState.status === AsyncStatus.Success ? discoveryState.data.response : [];
 
   return (
-    <div className="social-auth-shell">
-      <div className="social-auth-frame">
-        <div className="social-auth-brand">
-          <img className="social-brand-mark" src={AppIcon} alt="IIIT social logo" />
-          <span className="social-brand-name">IIIT social</span>
-        </div>
-        <div className="social-auth-content">
-          <div className="social-auth-hero">
+    <Scroll variant="Background" visibility="Hover" size="300" hideTrack>
+      <Box
+        className={classNames(css.AuthLayout, PatternsCss.BackgroundDotPattern)}
+        direction="Column"
+        alignItems="Center"
+        justifyContent="SpaceBetween"
+        gap="400"
+      >
+        <Box direction="Column" className={css.AuthCard}>
+          <Header className={css.AuthHeader} size="600" variant="Surface">
+            <Box grow="Yes" direction="Row" gap="300" alignItems="Center">
+              <img className={css.AuthLogo} src={AppIcon} alt="IIIT social logo" />
+              <Text size="H3">IIIT social</Text>
+            </Box>
+          </Header>
+          <Box className={css.AuthCardContent} direction="Column">
             {discoveryState.status === AsyncStatus.Loading && (
               <AuthLayoutLoading message="Connecting to IIIT social..." />
             )}
@@ -112,10 +123,10 @@ export function AuthLayout({ redirectToServerPath = true }: AuthLayoutProps) {
                 </AutoDiscoveryInfoProvider>
               </AuthServerProvider>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
         <AuthFooter />
-      </div>
-    </div>
+      </Box>
+    </Scroll>
   );
 }

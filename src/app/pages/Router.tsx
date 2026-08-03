@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { lazy, Suspense } from 'react';
 import {
   Outlet,
   Route,
@@ -37,7 +37,7 @@ import {
   getOriginBaseUrl,
   getSpaceLobbyPath,
 } from './pathUtils';
-import { ClientBindAtoms, ClientRoot } from './client';
+import { ClientBindAtoms, ClientLayout, ClientRoot } from './client';
 import { Home, HomeRouteRoomProvider, HomeSearch } from './client/home';
 import { Recent, RecentRouteRoomProvider } from './client/recent';
 import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
@@ -48,9 +48,10 @@ import { setAfterLoginRedirectPath } from './afterLoginRedirectPath';
 import { Room } from '../features/room';
 import { Lobby } from '../features/lobby';
 import { WelcomePage } from './client/WelcomePage';
+import { SidebarNav } from './client/SidebarNav';
 import { PageRoot } from '../components/page';
 import { ScreenSize } from '../hooks/useScreenSize';
-import { MobileFriendlyPageNav } from './MobileFriendly';
+import { MobileFriendlyPageNav, MobileFriendlyClientNav } from './MobileFriendly';
 import { ClientInitStorageAtom } from './client/ClientInitStorageAtom';
 import { ClientNonUIFeatures } from './client/ClientNonUIFeatures';
 import { AuthRouteThemeManager, UnAuthRouteThemeManager } from './ThemeManager';
@@ -66,7 +67,13 @@ import { Create } from './client/create';
 import { CreateSpaceModalRenderer } from '../features/create-space';
 import { SearchModalRenderer } from '../features/search';
 import { getFallbackSession } from '../state/sessions';
-import { SocialApp } from '../social/SocialApp';
+import { CallStatusRenderer } from './CallStatusRenderer';
+
+const CallEmbedProvider = lazy(() =>
+  import('../components/CallEmbedProvider').then((module) => ({
+    default: module.CallEmbedProvider,
+  }))
+);
 
 export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize) => {
   const { hashRouter } = clientConfig;
@@ -126,9 +133,20 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
               <ClientInitStorageAtom>
                 <ClientRoomsNotificationPreferences>
                   <ClientBindAtoms>
-                      <ClientNonUIFeatures>
+                    <ClientNonUIFeatures>
                       <Suspense fallback={null}>
-                        <SocialApp />
+                        <CallEmbedProvider>
+                          <ClientLayout
+                            nav={
+                              <MobileFriendlyClientNav>
+                                <SidebarNav />
+                              </MobileFriendlyClientNav>
+                            }
+                          >
+                            <Outlet />
+                          </ClientLayout>
+                          <CallStatusRenderer />
+                        </CallEmbedProvider>
                       </Suspense>
                       <SearchModalRenderer />
                       <UserRoomProfileRenderer />
@@ -146,8 +164,6 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
           </AuthRouteThemeManager>
         }
       >
-        <Route index element={null} />
-        <Route path="*" element={null} />
         <Route
           path={RECENT_PATH}
           element={

@@ -79,7 +79,7 @@ const getNotificationPreview = (mEvent: MatrixEvent): string => {
 const getNotificationEvent = async (
   mx: MatrixClient,
   roomId: string,
-  eventId: string
+  eventId: string,
 ): Promise<{ event: MatrixEvent; roomName: string; room: Room } | undefined> => {
   const room = mx.getRoom(roomId);
   if (!room) return undefined;
@@ -167,7 +167,7 @@ function InviteNotifications() {
           }
         },
       }),
-    [navigate]
+    [navigate],
   );
 
   const playSound = useCallback(() => {
@@ -250,7 +250,7 @@ function MessageNotifications() {
         notifRef.current = notification;
       });
     },
-    [navigate]
+    [navigate],
   );
 
   const playSound = useCallback(() => {
@@ -264,7 +264,7 @@ function MessageNotifications() {
       room,
       toStartOfTimeline,
       removed,
-      data
+      data,
     ) => {
       if (mx.getSyncState() !== 'SYNCING') return;
       if (
@@ -377,7 +377,7 @@ function PushNotificationReconciler() {
 
           const sender = result.event.getSender();
           const username = sender
-            ? getMemberDisplayName(result.room, sender) ?? getMxIdLocalPart(sender) ?? sender
+            ? (getMemberDisplayName(result.room, sender) ?? getMxIdLocalPart(sender) ?? sender)
             : undefined;
           port.postMessage({
             title: result.roomName,

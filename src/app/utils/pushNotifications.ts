@@ -19,7 +19,10 @@ type PushGatewayConfig = {
 };
 
 class PushRequestError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
     super(message);
   }
 }
@@ -42,7 +45,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const result = await response.json().catch(() => undefined);
     throw new PushRequestError(
       result?.error || `Push request failed (${response.status}).`,
-      response.status
+      response.status,
     );
   }
   return response.json() as Promise<T>;
@@ -118,7 +121,7 @@ export const getPushStatus = async (): Promise<PushNotificationStatus> => {
 
 export const enablePushNotifications = async (
   mx: MatrixClient,
-  clickBase: string
+  clickBase: string,
 ): Promise<void> => {
   if (!pushSupported()) throw new Error('Push notifications are not supported.');
   const permission =
@@ -156,7 +159,7 @@ export const enablePushNotifications = async (
           ...(current ? { Authorization: `Bearer ${current.managementToken}` } : {}),
         },
         body: JSON.stringify(subscriptionBody),
-      }
+      },
     );
   } catch (error) {
     if (current && error instanceof PushRequestError && [401, 404].includes(error.status)) {
@@ -167,7 +170,7 @@ export const enablePushNotifications = async (
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(subscriptionBody),
-        }
+        },
       );
     } else {
       await subscription.unsubscribe();
@@ -223,7 +226,7 @@ export const sendTestPushNotification = async (): Promise<void> => {
 export const reconcilePushNotifications = async (
   mx: MatrixClient,
   clickBase: string,
-  force = false
+  force = false,
 ): Promise<void> => {
   const registration = getPushRegistration();
   const previewNeedsUpdate = registration?.previewMode !== 'maximum';
@@ -250,7 +253,7 @@ export const reconcilePushNotifications = async (
   const { pushers } = await mx.getPushers();
   if (
     !pushers.some(
-      (pusher) => pusher.app_id === registration.appId && pusher.pushkey === registration.pushKey
+      (pusher) => pusher.app_id === registration.appId && pusher.pushkey === registration.pushKey,
     )
   ) {
     await setHttpPusher(mx, registration);

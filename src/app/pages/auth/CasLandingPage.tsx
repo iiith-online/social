@@ -1,4 +1,5 @@
 import React from 'react';
+import { Box, Text, color } from 'folds';
 import type { IIdentityProvider, ISSOFlow, LoginFlow } from 'matrix-js-sdk/lib/@types/auth';
 import { useAuthFlows } from '../../hooks/useAuthFlows';
 import { useAuthServer } from '../../hooks/useAuthServer';
@@ -8,7 +9,7 @@ import { CasLoginButton } from './CasLoginButton';
 
 const isCasProvider = (provider: IIdentityProvider): boolean =>
   [provider.id, provider.name, provider.brand].some(
-    (value) => typeof value === 'string' && value.toLowerCase().includes('cas')
+    (value) => typeof value === 'string' && value.toLowerCase().includes('cas'),
   );
 
 export function CasLandingPage() {
@@ -22,10 +23,15 @@ export function CasLandingPage() {
   const casProvider = casFlow?.identity_providers?.find(isCasProvider);
 
   return (
-    <div className="social-auth-hero">
-      <img className="social-brand-mark" src="/icons/web/icon-512.png" alt="IIIT social" />
-      <h1>IIIT social</h1>
-      <p>Campus conversations, backed by Matrix.</p>
+    <Box direction="Column" gap="500">
+      <Box direction="Column" alignItems="Center" gap="200">
+        <Text as="h1" align="Center" size="H2">
+          Welcome to IIIT social
+        </Text>
+        <Text align="Center" priority="400">
+          Sign in with your IIIT account to continue.
+        </Text>
+      </Box>
       {casProvider ? (
         <CasLoginButton
           provider={casProvider}
@@ -33,9 +39,10 @@ export function CasLandingPage() {
           loginType={casFlow?.type === 'm.login.cas' ? 'cas' : 'sso'}
         />
       ) : (
-        <p className="social-auth-error">CAS login is currently unavailable on IIIT social.</p>
+        <Text align="Center" style={{ color: color.Critical.Main }}>
+          CAS login is currently unavailable on IIIT social.
+        </Text>
       )}
-      <span className="social-auth-domain">matrix.iiit.ac.in</span>
-    </div>
+    </Box>
   );
 }

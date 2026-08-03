@@ -32,7 +32,7 @@ export const login = async (baseUrl: string, token: string): Promise<CustomLogin
       type: 'm.login.token',
       token,
       initial_device_display_name: 'IIIT social Web',
-    })
+    }),
   );
 
   if (err) {

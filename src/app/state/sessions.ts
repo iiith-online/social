@@ -40,7 +40,7 @@ export function setFallbackSession(
   accessToken: string,
   deviceId: string,
   userId: string,
-  baseUrl: string
+  baseUrl: string,
 ) {
   localStorage.setItem(SESSION_STORAGE_KEYS.accessToken, accessToken);
   localStorage.setItem(SESSION_STORAGE_KEYS.deviceId, deviceId);

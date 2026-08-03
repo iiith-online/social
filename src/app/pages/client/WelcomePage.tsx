@@ -120,7 +120,7 @@ function HomeDashboard() {
         .filter((roomId) => mx.getRoom(roomId))
         .sort(factoryRoomIdByMessageActivity(mx))
         .slice(0, 6),
-    [mx, rooms]
+    [mx, rooms],
   );
   const unreadRoomIds = useMemo(
     () =>
@@ -135,7 +135,7 @@ function HomeDashboard() {
           return (bUnread?.total ?? 0) - (aUnread?.total ?? 0);
         })
         .slice(0, 5),
-    [roomToUnread, rooms]
+    [roomToUnread, rooms],
   );
 
   const getRoom = (roomId: string) => mx.getRoom(roomId);

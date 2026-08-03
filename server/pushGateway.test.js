@@ -13,7 +13,7 @@ test('renders private payloads without leaking message content', () => {
       content: { msgtype: 'm.text', body: 'secret text' },
       counts: { unread: 3 },
     },
-    { clickBase: 'https://matrix.example.org', previewMode: 'private' }
+    { clickBase: 'https://matrix.example.org', previewMode: 'private' },
   );
 
   assert.equal(payload.title, 'IIIT social');
@@ -32,7 +32,7 @@ test('never renders encrypted ciphertext', () => {
       type: 'm.room.encrypted',
       content: { ciphertext: 'do-not-render' },
     },
-    { clickBase: 'https://matrix.example.org/#', previewMode: 'maximum' }
+    { clickBase: 'https://matrix.example.org/#', previewMode: 'maximum' },
   );
 
   assert.equal(payload.body, 'Alice: Encrypted message');
@@ -41,7 +41,7 @@ test('never renders encrypted ciphertext', () => {
   assert.equal(payload.encrypted, true);
   assert.equal(
     buildClickUrl('https://matrix.example.org/#', '!room:example.org', '$event'),
-    'https://matrix.example.org/#/recent/!room%3Aexample.org/%24event/'
+    'https://matrix.example.org/#/recent/!room%3Aexample.org/%24event/',
   );
   assert.equal(sanitizeText('hello\u0000   world'), 'hello world');
 });

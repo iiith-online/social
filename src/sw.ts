@@ -87,7 +87,7 @@ function requestSession(client: Client): Promise<SessionInfo | undefined> {
 
 async function requestSessionWithTimeout(
   clientId: string,
-  timeoutMs = 3000
+  timeoutMs = 3000,
 ): Promise<SessionInfo | undefined> {
   const client = await self.clients.get(clientId);
   if (!client) return undefined;
@@ -106,7 +106,7 @@ self.addEventListener('install', (event: ExtendableEvent) => {
     caches
       .open(SHELL_CACHE)
       .then((cache) => cache.add(new Request(self.registration.scope, { cache: 'reload' })))
-      .catch(() => undefined)
+      .catch(() => undefined),
   );
   self.skipWaiting();
 });
@@ -116,7 +116,7 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
     (async () => {
       await self.clients.claim();
       await cleanupDeadClients();
-    })()
+    })(),
   );
 });
 
@@ -142,7 +142,7 @@ function safeClickUrl(value: unknown): string {
 
 async function requestNotificationPreview(
   client: WindowClient | undefined,
-  payload: PushPayload
+  payload: PushPayload,
 ): Promise<NotificationPreview | undefined> {
   if (!client || !payload.encrypted || !payload.roomId || !payload.eventId) return undefined;
 
@@ -170,7 +170,7 @@ async function requestNotificationPreview(
         roomId: payload.roomId,
         eventId: payload.eventId,
       },
-      [channel.port2]
+      [channel.port2],
     );
   });
 }
@@ -202,7 +202,7 @@ self.addEventListener('push', (event: PushEvent) => {
         tag: payload.tag,
         data: { clickUrl: safeClickUrl(payload.clickUrl) },
       });
-    })()
+    })(),
   );
 });
 
@@ -210,7 +210,7 @@ self.addEventListener('pushsubscriptionchange', (event: ExtendableEvent) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       clients.forEach((client) => client.postMessage({ type: 'pushSubscriptionChanged' }));
-    })
+    }),
   );
 });
 
@@ -238,7 +238,7 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
         }
       }
       await self.clients.openWindow(clickUrl);
-    })()
+    })(),
   );
 });
 
@@ -319,7 +319,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
             (await cache.match(self.registration.scope)) ??
             Response.error()
           );
-        })
+        }),
     );
     return;
   }
@@ -343,6 +343,6 @@ self.addEventListener('fetch', (event: FetchEvent) => {
         return fetch(url, fetchConfig(s.accessToken));
       }
       return fetch(event.request, { cache: 'no-store' });
-    })
+    }),
   );
 });

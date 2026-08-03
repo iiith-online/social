@@ -48,8 +48,8 @@ function EmailNotification() {
           kind: null,
         } as unknown as IPusherRequest);
       },
-      [mx]
-    )
+      [mx],
+    ),
   );
 
   const handleChange = (value: boolean) => {
@@ -101,7 +101,7 @@ export function SystemNotification() {
   const [notifyWhenActive, setNotifyWhenActive] = useSetting(settingsAtom, 'notifyWhenActive');
   const [isNotificationSounds, setIsNotificationSounds] = useSetting(
     settingsAtom,
-    'isNotificationSounds'
+    'isNotificationSounds',
   );
 
   const [pushStatus, setPushStatus] = useState<PushNotificationStatus>();

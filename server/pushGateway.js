@@ -95,7 +95,7 @@ const rateLimit = async (req, bucket, limit) => {
         ELSE push_rate_limits.window_started_at
       END
     RETURNING request_count
-  `
+  `,
   );
   const count = Number(rows[0]?.request_count || 0);
   if (count === 1) {
@@ -103,7 +103,7 @@ const rateLimit = async (req, bucket, limit) => {
       (sql) => sql`
         DELETE FROM push_rate_limits
         WHERE window_started_at <= NOW() - ${24 * 60 * 60} * INTERVAL '1 second'
-      `
+      `,
     ).catch(() => undefined);
   }
   if (count > limit) throw new HttpError(429, 'Too many requests. Try again later.');
@@ -115,7 +115,7 @@ export const requireSameOrigin = (req) => {
     (process.env.PUSH_ALLOWED_ORIGINS || '')
       .split(',')
       .map((value) => value.trim())
-      .filter(Boolean)
+      .filter(Boolean),
   );
   allowed.add(requestOrigin(req));
   if (!origin || !allowed.has(origin)) throw new HttpError(403, 'Origin is not allowed.');
@@ -187,7 +187,7 @@ const loadManagedRecord = async (req) => {
   const rows = await databaseQuery((db) =>
     db.query(`${PUSH_SELECT} WHERE management_hash = $1 AND expires_at > NOW() LIMIT 1`, [
       sha256(token),
-    ])
+    ]),
   );
   if (rows.length === 0) throw new HttpError(401, 'Invalid management token.');
   return { token, pushKey: rows[0].push_key, record: recordFromRow(rows[0]) };
@@ -199,7 +199,7 @@ const loadPushRecords = async (pushKeys) => {
   const rows = await databaseQuery((db) =>
     db.query(`${PUSH_SELECT} WHERE push_key = ANY($1::text[]) AND expires_at > NOW()`, [
       uniquePushKeys,
-    ])
+    ]),
   );
   return new Map(rows.map((row) => [row.push_key, recordFromRow(row)]));
 };
@@ -237,7 +237,7 @@ const saveRecord = async (pushKey, record) => {
       preview_mode = EXCLUDED.preview_mode,
       updated_at = EXCLUDED.updated_at,
       expires_at = EXCLUDED.expires_at
-  `
+  `,
   );
 };
 
@@ -247,7 +247,7 @@ const refreshRecord = async (pushKey) => {
     UPDATE push_subscriptions
     SET updated_at = NOW(), expires_at = NOW() + ${SUBSCRIPTION_TTL} * INTERVAL '1 second'
     WHERE push_key = ${pushKey}
-  `
+  `,
   );
 };
 
@@ -271,7 +271,7 @@ export const isEnabled = async () => {
   const rows = await databaseQuery(
     (sql) => sql`
     SELECT value FROM push_settings WHERE key = 'enabled' LIMIT 1
-  `
+  `,
   );
   if (rows.length === 0) return process.env.PUSH_ENABLED === 'true';
   return ['1', 'true', 'on'].includes(String(rows[0].value).toLowerCase());
@@ -442,7 +442,7 @@ const claimDedupe = async (pushKey, eventId) => {
       AND push_dedupes.delivered_until <= NOW()
     )
     RETURNING push_key
-  `
+  `,
   );
   return rows.length > 0;
 };
@@ -455,7 +455,7 @@ const markDedupeDelivered = async (pushKey, eventId) => {
         claimed_until = NULL,
         delivered_until = NOW() + ${DEDUPE_TTL} * INTERVAL '1 second'
     WHERE push_key = ${pushKey} AND event_id = ${eventId}
-  `
+  `,
   );
 };
 
@@ -464,7 +464,7 @@ const releaseDedupe = async (pushKey, eventId) => {
     (sql) => sql`
     DELETE FROM push_dedupes
     WHERE push_key = ${pushKey} AND event_id = ${eventId} AND state = 'pending'
-  `
+  `,
   );
 };
 
@@ -492,7 +492,7 @@ export const handleMatrixNotify = async (req) => {
   const records = await loadPushRecords(
     notification.devices
       .map((device) => device?.pushkey)
-      .filter((pushKey) => typeof pushKey === 'string' && pushKey.length <= 512)
+      .filter((pushKey) => typeof pushKey === 'string' && pushKey.length <= 512),
   );
   const rejected = [];
   let transientFailure = false;
