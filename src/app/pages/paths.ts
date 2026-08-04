@@ -33,12 +33,16 @@ export const _ROOM_PATH = ':roomIdOrAlias/:eventId?/';
 export type _PostPathSearchParams = Record<string, never>;
 export const _POST_PATH = ':roomIdOrAlias/post/:eventId/';
 
+export type _ProfilePathSearchParams = Record<string, never>;
+export const _PROFILE_PATH = 'profile/:userId/';
+
 export const HOME_PATH = '/home/';
 export const HOME_CREATE_PATH = `/home/${_CREATE_PATH}`;
 export const HOME_JOIN_PATH = `/home/${_JOIN_PATH}`;
 export const HOME_SEARCH_PATH = `/home/${_SEARCH_PATH}`;
 export const HOME_ROOM_PATH = `/home/${_ROOM_PATH}`;
 export const HOME_POST_PATH = `/home/${_POST_PATH}`;
+export const HOME_PROFILE_PATH = `/home/${_PROFILE_PATH}`;
 
 export const RECENT_PATH = '/recent/';
 export const RECENT_ROOM_PATH = `/recent/${_ROOM_PATH}`;

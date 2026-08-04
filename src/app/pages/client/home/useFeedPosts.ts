@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -14,11 +15,12 @@ import {
   RelationType,
   Room,
 } from 'matrix-js-sdk';
+import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
 import to from 'await-to-js';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { COMMUNITY_SPACE_ID } from '../../../state/communitySpace';
-import { MessageEvent } from '../../../../types/matrix/room';
+import { MessageEvent, StateEvent } from '../../../../types/matrix/room';
 import { getPostVoteState, togglePostVote, PostVote } from '../../../utils/postVote';
 
 export { POST_UP_KEY as FEED_UP_KEY, POST_DOWN_KEY as FEED_DOWN_KEY } from '../../../utils/postVote';
@@ -32,11 +34,10 @@ export type FeedPost = {
   myVote?: PostVote;
   myReactionId?: string;
   replyCount: number;
+  pinned: boolean;
 };
 
-const TIMELINE_LIMIT = 100;
-const MAX_POSTS_PER_ROOM = 20;
-const MAX_POSTS = 60;
+const PAGE_SIZE = 100;
 const RELATIONS_LIMIT = 100;
 const REFRESH_INTERVAL = 60_000;
 
@@ -73,7 +74,7 @@ export const getInReplyToEventId = (
 
 // Every message in a community room is a post. Replies (thread or inline)
 // and edits are not posts — they are comments on the message they target.
-const isPostEvent = (evt: MatrixEvent): boolean => {
+export const isPostEvent = (evt: MatrixEvent): boolean => {
   if (evt.isDecryptionFailure()) return false;
   const type = evt.getType();
   if (type !== MessageEvent.RoomMessage && type !== MessageEvent.RoomMessageEncrypted) {
@@ -90,8 +91,37 @@ const isPostEvent = (evt: MatrixEvent): boolean => {
   );
 };
 
+export const getPinnedEventIds = (room: Room): Set<string> => {
+  const pinEvents = room.currentState.getStateEvents(StateEvent.RoomPinnedEvents);
+  const content = pinEvents?.[0]?.getContent<RoomPinnedEventsEventContent>();
+  return new Set(content?.pinned ?? []);
+};
+
+// The server does not index m.in_reply_to relations, so inline replies
+// (how other clients reply) never surface via the relations endpoint.
+// Count them from fetched windows; each reply event is counted once.
+export const collectInlineComments = (
+  roomId: string,
+  events: MatrixEvent[],
+  map: Map<string, number>,
+  counted: Set<string>
+): void => {
+  events.forEach((evt) => {
+    if (evt.isDecryptionFailure() || evt.isRedacted()) return;
+    const relation = getEventRelation(evt);
+    if (!relation || relation.rel_type === RelationType.Thread) return;
+    const target = getInReplyToEventId(relation);
+    if (!target) return;
+    const replyKey = `${roomId}:${evt.getId()}`;
+    if (counted.has(replyKey)) return;
+    counted.add(replyKey);
+    const key = `${roomId}:${target}`;
+    map.set(key, (map.get(key) ?? 0) + 1);
+  });
+};
+
 // Batched async map: runs `fn` over items in batches of `batchSize`, awaiting each batch.
-const mapBatched = <T, R>(
+export const mapBatched = <T, R>(
   items: T[],
   batchSize: number,
   fn: (item: T) => Promise<R>
@@ -116,53 +146,53 @@ export const fetchCommunityRoomIds = async (mx: MatrixClient): Promise<string[]>
   }
 };
 
+// Fetches one page of room history (newest first). `fromToken` is the
+// `end` token of the previous page, or null for the newest page.
+export const pageRoomHistory = async (
+  mx: MatrixClient,
+  room: Room,
+  fromToken: string | null
+): Promise<{ events: MatrixEvent[]; nextToken: string | null }> => {
+  try {
+    const result = await mx.createMessagesRequest(
+      room.roomId,
+      fromToken,
+      PAGE_SIZE,
+      Direction.Backward
+    );
+    const events = await Promise.all(result.chunk.map((raw) => mapEvent(mx, raw)));
+    return { events, nextToken: result.end ?? null };
+  } catch {
+    return { events: [], nextToken: null };
+  }
+};
+
+const toFeedPost = (roomId: string, root: MatrixEvent, pinned: Set<string>): FeedPost => ({
+  roomId,
+  eventId: root.getId() ?? '',
+  root,
+  upvotes: 0,
+  downvotes: 0,
+  myVote: undefined,
+  myReactionId: undefined,
+  replyCount: 0,
+  pinned: pinned.has(root.getId() ?? ''),
+});
+
 export const getRoomPosts = async (
   mx: MatrixClient,
   room: Room
 ): Promise<{ posts: FeedPost[]; inlineComments: Map<string, number> }> => {
-  let chunk: Partial<IEvent>[] = [];
-  try {
-    const result = await mx.createMessagesRequest(
-      room.roomId,
-      null,
-      TIMELINE_LIMIT,
-      Direction.Backward
-    );
-    chunk = result.chunk;
-  } catch {
-    return { posts: [], inlineComments: new Map() };
-  }
-
-  const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
-
-  // The server does not index m.in_reply_to relations, so inline replies
-  // (how other clients reply) never surface via the relations endpoint.
-  // Count them from the fetched window so they still register as comments.
+  const { events } = await pageRoomHistory(mx, room, null);
   const inlineComments = new Map<string, number>();
-  events.forEach((evt) => {
-    if (evt.isDecryptionFailure() || evt.isRedacted()) return;
-    const relation = getEventRelation(evt);
-    if (!relation || relation.rel_type === RelationType.Thread) return;
-    const target = getInReplyToEventId(relation);
-    if (!target) return;
-    inlineComments.set(target, (inlineComments.get(target) ?? 0) + 1);
-  });
+  collectInlineComments(room.roomId, events, inlineComments, new Set());
+  const pinned = getPinnedEventIds(room);
 
   return {
     posts: events
       .filter(isPostEvent)
       .filter((evt) => Boolean(evt.getId()))
-      .slice(0, MAX_POSTS_PER_ROOM)
-      .map((root) => ({
-        roomId: room.roomId,
-        eventId: root.getId() ?? '',
-        root,
-        upvotes: 0,
-        downvotes: 0,
-        myVote: undefined,
-        myReactionId: undefined,
-        replyCount: 0,
-      })),
+      .map((root) => toFeedPost(room.roomId, root, pinned)),
     inlineComments,
   };
 };
@@ -210,9 +240,19 @@ export const enrichPost = async (
     downvotes,
     myVote: voteState.myVote,
     myReactionId: voteState.myReactionId,
-    replyCount: replyIds.size + (inlineComments?.get(post.eventId) ?? 0),
+    replyCount: replyIds.size + (inlineComments?.get(`${post.roomId}:${post.eventId}`) ?? 0),
   };
 };
+
+// Rooms hydrate from the sync store asynchronously after login; retry until
+// the client knows them (bounded), so the first load isn't empty.
+export const waitForCommunityRooms = (mx: MatrixClient, attemptsLeft: number): Promise<string[]> =>
+  fetchCommunityRoomIds(mx).then((ids) => {
+    if (ids.length > 0 || attemptsLeft <= 0) return ids;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    window.setTimeout(resolve, 500);
+    return promise.then(() => waitForCommunityRooms(mx, attemptsLeft - 1));
+  });
 
 const makeApplyVote =
   (mx: MatrixClient, setPosts: Dispatch<SetStateAction<FeedPost[]>>) =>
@@ -232,16 +272,6 @@ const makeApplyVote =
       })
     );
   };
-
-// Rooms hydrate from the sync store asynchronously after login; retry until
-// the client knows them (bounded), so the first load isn't empty.
-const waitForCommunityRooms = (mx: MatrixClient, attemptsLeft: number): Promise<string[]> =>
-  fetchCommunityRoomIds(mx).then((ids) => {
-    if (ids.length > 0 || attemptsLeft <= 0) return ids;
-    const { promise, resolve } = Promise.withResolvers<void>();
-    window.setTimeout(resolve, 500);
-    return promise.then(() => waitForCommunityRooms(mx, attemptsLeft - 1));
-  });
 
 const useFeedRefresh = (load: () => Promise<void>) => {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -263,38 +293,105 @@ export const useFeedPosts = () => {
 
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const postsMapRef = useRef<Map<string, FeedPost>>(new Map());
+  const tokensRef = useRef<Map<string, string | null>>(new Map());
+  const inlineCountsRef = useRef<Map<string, number>>(new Map());
+  const countedRepliesRef = useRef<Set<string>>(new Set());
+  const busyRef = useRef(false);
+
+  const getRooms = useCallback(async () => {
     const ids = await waitForCommunityRooms(mx, 20);
-    const rooms = ids
+    return ids
       .map((roomId) => mx.getRoom(roomId))
       .filter((room): room is Room => Boolean(room));
-
-    const roomResults = await mapBatched(rooms, 5, (room) => getRoomPosts(mx, room));
-    const inlineComments = roomResults.reduce(
-      (merged, result) => {
-        result.inlineComments.forEach((count, target) => {
-          merged.set(target, (merged.get(target) ?? 0) + count);
-        });
-        return merged;
-      },
-      new Map<string, number>()
-    );
-    const collected = roomResults.flatMap((result) => result.posts).slice(0, MAX_POSTS);
-    const enriched = await mapBatched(collected, 8, (post) =>
-      enrichPost(mx, post, inlineComments)
-    );
-
-    setPosts(enriched);
-    setLoading(false);
   }, [mx]);
+
+  // Fetches one page per room (newest window when `firstPage`, else the next
+  // unread page) and merges posts into the map. Returns whether any room has
+  // more history left.
+  const processPages = useCallback(
+    async (rooms: Room[], firstPage: boolean): Promise<boolean> => {
+      const pages = await mapBatched(rooms, 5, async (room) => {
+        const from = firstPage ? null : tokensRef.current.get(room.roomId) ?? null;
+        const page = await pageRoomHistory(mx, room, from);
+        return {
+          roomId: room.roomId,
+          events: page.events,
+          nextToken: page.nextToken,
+          pinned: getPinnedEventIds(room),
+        };
+      });
+
+      const fresh: FeedPost[] = [];
+      pages.forEach((page) => {
+        collectInlineComments(
+          page.roomId,
+          page.events,
+          inlineCountsRef.current,
+          countedRepliesRef.current
+        );
+        tokensRef.current.set(page.roomId, page.nextToken);
+        page.events.forEach((evt) => {
+          if (!isPostEvent(evt)) return;
+          const id = evt.getId();
+          if (!id) return;
+          fresh.push(toFeedPost(page.roomId, evt, page.pinned));
+        });
+      });
+
+      const enriched = await mapBatched(fresh, 8, (post) =>
+        enrichPost(mx, post, inlineCountsRef.current)
+      );
+      enriched.forEach((post) => {
+        postsMapRef.current.set(`${post.roomId}:${post.eventId}`, post);
+      });
+      setPosts(Array.from(postsMapRef.current.values()));
+
+      return pages.some((page) => page.nextToken !== null);
+    },
+    [mx]
+  );
+
+  const load = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    if (postsMapRef.current.size === 0) setLoading(true);
+    const rooms = await getRooms();
+    const more = await processPages(rooms, true);
+    setHasMore(more);
+    setLoading(false);
+    busyRef.current = false;
+  }, [getRooms, processPages]);
+
+  const loadMore = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setLoadingMore(true);
+    const rooms = await getRooms();
+    const more = await processPages(rooms, false);
+    setHasMore(more);
+    setLoadingMore(false);
+    busyRef.current = false;
+  }, [getRooms, processPages]);
 
   const { refresh } = useFeedRefresh(load);
 
-  const applyVote = useMemo(() => makeApplyVote(mx, setPosts), [mx]);
+  const applyVote = useCallback(
+    (roomId: string, eventId: string, vote: PostVote) => {
+      const key = `${roomId}:${eventId}`;
+      const post = postsMapRef.current.get(key);
+      if (!post) return;
+      const next = togglePostVote(mx, roomId, eventId, post, vote);
+      postsMapRef.current.set(key, { ...post, ...next });
+      setPosts(Array.from(postsMapRef.current.values()));
+    },
+    [mx]
+  );
 
-  return { posts, loading, refresh, applyVote };
+  return { posts, loading, loadingMore, hasMore, refresh, loadMore, applyVote };
 };
 
 export const useRoomPosts = (roomId: string) => {
@@ -320,7 +417,10 @@ export const useRoomPosts = (roomId: string) => {
 
   const { refresh } = useFeedRefresh(load);
 
-  const applyVote = useMemo(() => makeApplyVote(mx, setPosts), [mx]);
+  const applyVote = useMemo(
+    () => makeApplyVote(mx, setPosts),
+    [mx]
+  );
 
   return { posts, loading, refresh, applyVote };
 };

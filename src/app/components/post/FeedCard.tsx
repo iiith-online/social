@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Icon, Icons, Text, config } from 'folds';
 import { SequenceCard } from '../../components/sequence-card';
 import { VoteColumn } from './VoteColumn';
+import { PostMenu } from './PostMenu';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { getPostPath } from '../../pages/pathUtils';
+import { getPostPath, getProfilePath } from '../../pages/pathUtils';
 import { getCanonicalAliasOrRoomId } from '../../utils/matrix';
 import { getMemberDisplayName } from '../../utils/room';
 import { relativeTime } from '../../utils/time';
@@ -35,6 +36,11 @@ export function FeedCard({ post, onVote }: FeedCardProps) {
   const title = getPostTitle(post);
   const preview = getPostPreview(post);
 
+  const handleOpenProfile = (evt: React.MouseEvent<HTMLButtonElement>) => {
+    evt.stopPropagation();
+    if (sender) navigate(getProfilePath(sender));
+  };
+
   return (
     <SequenceCard
       variant="SurfaceVariant"
@@ -46,12 +52,38 @@ export function FeedCard({ post, onVote }: FeedCardProps) {
       <Box gap="200" alignItems="Start">
         <VoteColumn state={post} onVote={(vote) => onVote(post.roomId, post.eventId, vote)} />
         <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
-          <Text size="T200" priority="400" truncate>
-            r/{room.name ?? room.roomId} · {authorName} · {relativeTime(post.root.getTs())}
-          </Text>
-          <Text size="H6" truncate>
-            {title}
-          </Text>
+          <Box gap="100" alignItems="Center">
+            <Box grow="Yes" style={{ minWidth: 0 }}>
+              <Text size="T200" priority="400" truncate>
+                r/{room.name ?? room.roomId} ·{' '}
+                <button
+                  type="button"
+                  onClick={handleOpenProfile}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: 'inherit',
+                    font: 'inherit',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  {authorName}
+                </button>{' '}
+                · {relativeTime(post.root.getTs())}
+              </Text>
+            </Box>
+            <PostMenu room={room} event={post.root} />
+          </Box>
+          <Box gap="100" alignItems="Center" style={{ minWidth: 0 }}>
+            <Box grow="Yes" style={{ minWidth: 0 }}>
+              <Text size="H6" truncate>
+                {title}
+              </Text>
+            </Box>
+            {post.pinned && <Icon size="100" src={Icons.Pin} aria-label="Pinned post" />}
+          </Box>
           {preview && (
             <Text size="T300" priority="300" truncate>
               {preview}

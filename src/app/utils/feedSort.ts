@@ -13,20 +13,30 @@ export const getInteractions = (post: FeedPost): number =>
 
 const getAgeDays = (post: FeedPost): number => (Date.now() - post.root.getTs()) / 86400000;
 
+// Pinned posts always sort above the rest, within any tab.
+const pinRank = (post: FeedPost): number => (post.pinned ? 0 : 1);
+
 export const sortFeedPosts = (posts: FeedPost[], sort: FeedSort): FeedPost[] => {
   const sorted = [...posts];
   if (sort === 'recent') {
-    sorted.sort((a, b) => b.root.getTs() - a.root.getTs());
+    sorted.sort(
+      (a, b) => pinRank(a) - pinRank(b) || b.root.getTs() - a.root.getTs()
+    );
   } else if (sort === 'top') {
     sorted.sort(
-      (a, b) => getInteractions(b) - getInteractions(a) || b.root.getTs() - a.root.getTs()
+      (a, b) =>
+        pinRank(a) - pinRank(b) ||
+        getInteractions(b) - getInteractions(a) ||
+        b.root.getTs() - a.root.getTs()
     );
   } else {
     // recommended: (1 + days old) * interactions
     sorted.sort(
       (a, b) =>
+        pinRank(a) - pinRank(b) ||
         (1 + getAgeDays(b)) * getInteractions(b) -
-          (1 + getAgeDays(a)) * getInteractions(a) || b.root.getTs() - a.root.getTs()
+          (1 + getAgeDays(a)) * getInteractions(a) ||
+        b.root.getTs() - a.root.getTs()
     );
   }
   return sorted;

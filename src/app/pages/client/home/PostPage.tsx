@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Direction, EventType, MatrixEvent, MsgType, RelationType } from 'matrix-js-sdk';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Direction, EventType, MatrixEvent, MsgType, RelationType, Room } from 'matrix-js-sdk';
+import { HTMLReactParserOptions } from 'html-react-parser';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import to from 'await-to-js';
 import {
   Box,
-  Button,
+  Chip,
   Icon,
   IconButton,
   Icons,
@@ -13,23 +14,28 @@ import {
   Spinner,
   Text,
   TextArea,
+  Button,
   config,
   toRem,
 } from 'folds';
 import { Page, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
-import { VoteColumn } from '../../../components/post/VoteColumn';
+import { CompactVoteColumn, VoteColumn } from '../../../components/post/VoteColumn';
+import { PostMenu } from '../../../components/post/PostMenu';
 import { RenderBody } from '../../../components/message';
 import { useRoom } from '../../../hooks/useRoom';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useRoomEvent } from '../../../hooks/useRoomEvent';
-import { getEventRelation, getInReplyToEventId } from './useFeedPosts';
+import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
+import { getEventRelation, getInReplyToEventId, mapBatched } from './useFeedPosts';
 import { useRoomName } from '../../../hooks/useRoomMeta';
 import { getMemberDisplayName } from '../../../utils/room';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
 import { relativeTime } from '../../../utils/time';
+import { getProfilePath } from '../../../pages/pathUtils';
 import {
+  getPostScore,
   getPostVoteState,
   PostVote,
   PostVoteState,
@@ -51,26 +57,40 @@ const getPostBody = (content: Record<string, unknown>): string => {
 };
 
 type CommentItemProps = {
-  room: ReturnType<typeof useRoom>;
+  room: Room;
   event: MatrixEvent;
-  parserOptions: ReturnType<typeof getReactCustomHtmlParser>;
+  parserOptions: HTMLReactParserOptions;
+  voteState: PostVoteState;
+  onVote: (vote: PostVote) => void;
 };
-function CommentItem({ room, event, parserOptions }: CommentItemProps) {
+function CommentItem({ room, event, parserOptions, voteState, onVote }: CommentItemProps) {
   const sender = event.getSender();
   const authorName = sender
     ? getMemberDisplayName(room, sender) ?? sender.split(':')[0].replace('@', '')
     : 'unknown';
   const content = event.getContent();
   const body = typeof content.body === 'string' ? content.body : '';
-  const customBody = typeof content['org.matrix.custom.html'] === 'string'
-    ? (content['org.matrix.custom.html'] as string)
-    : undefined;
+  const customBody =
+    typeof content['org.matrix.custom.html'] === 'string'
+      ? (content['org.matrix.custom.html'] as string)
+      : undefined;
 
   return (
-    <SequenceCard variant="SurfaceVariant" direction="Column" gap="100" style={{ padding: config.space.S200 }}>
-      <Text size="T200" priority="400">
-        {authorName} · {relativeTime(event.getTs())}
-      </Text>
+    <SequenceCard
+      variant="SurfaceVariant"
+      direction="Column"
+      gap="100"
+      style={{ padding: config.space.S200 }}
+    >
+      <Box gap="100" alignItems="Center">
+        <CompactVoteColumn state={voteState} onVote={onVote} />
+        <Box grow="Yes" style={{ minWidth: 0 }}>
+          <Text size="T200" priority="400" truncate>
+            {authorName} · {relativeTime(event.getTs())}
+          </Text>
+        </Box>
+        <PostMenu room={room} event={event} />
+      </Box>
       <RenderBody
         body={body}
         customBody={customBody}
@@ -95,10 +115,12 @@ function CommentComposer({ roomId, eventId, onSent }: CommentComposerProps) {
     if (!body) return;
     // Passing the post event id as threadId makes the SDK attach the
     // m.thread relation (with an m.in_reply_to fallback) automatically.
-    await mx.sendEvent(roomId, eventId, EventType.RoomMessage, {
-      msgtype: MsgType.Text,
-      body,
-    }).catch(() => undefined);
+    await mx
+      .sendEvent(roomId, eventId, EventType.RoomMessage, {
+        msgtype: MsgType.Text,
+        body,
+      })
+      .catch(() => undefined);
     setText('');
     onSent();
   };
@@ -145,15 +167,23 @@ function CommentComposer({ roomId, eventId, onSent }: CommentComposerProps) {
   );
 }
 
+type CommentSort = 'top' | 'new';
+
+const NO_VOTES: PostVoteState = { upvotes: 0, downvotes: 0 };
+
 export function PostPage() {
   const mx = useMatrixClient();
   const room = useRoom();
   const roomName = useRoomName(room);
+  const navigate = useNavigate();
   const { eventId } = useParams();
   const post = useRoomEvent(room, eventId ?? '');
+  const pinnedIds = useRoomPinnedEvents(room);
 
   const [comments, setComments] = useState<MatrixEvent[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentVotes, setCommentVotes] = useState<Map<string, PostVoteState>>(new Map());
+  const [commentSort, setCommentSort] = useState<CommentSort>('top');
   const [voteState, setVoteState] = useState<PostVoteState>({ upvotes: 0, downvotes: 0 });
 
   const parserOptions = useMemo(
@@ -177,12 +207,7 @@ export function PostPage() {
     // Find them in the recent room timeline instead.
     let windowEvents: MatrixEvent[] = [];
     try {
-      const window = await mx.createMessagesRequest(
-        room.roomId,
-        null,
-        100,
-        Direction.Backward
-      );
+      const window = await mx.createMessagesRequest(room.roomId, null, 100, Direction.Backward);
       windowEvents = await Promise.all(
         window.chunk.map(async (raw) => {
           const mEvent = new MatrixEvent(raw);
@@ -204,11 +229,7 @@ export function PostPage() {
         getInReplyToEventId(relation) === eventId
       );
     });
-    const all = [
-      ...(threads?.events ?? []),
-      ...(inlines?.events ?? []),
-      ...inlineReplies,
-    ];
+    const all = [...(threads?.events ?? []), ...(inlines?.events ?? []), ...inlineReplies];
     const unique = Array.from(new Map(all.map((evt) => [evt.getId(), evt])).values());
     await Promise.all(
       unique.map(async (evt) => {
@@ -217,11 +238,14 @@ export function PostPage() {
         }
       })
     );
-    setComments(
-      unique
-        .filter((evt) => !evt.isDecryptionFailure() && !evt.isRedacted())
-        .sort((a, b) => a.getTs() - b.getTs())
-    );
+    const valid = unique.filter((evt) => !evt.isDecryptionFailure() && !evt.isRedacted());
+    setComments(valid.sort((a, b) => a.getTs() - b.getTs()));
+
+    const voteEntries = await mapBatched(valid, 8, async (evt) => {
+      const id = evt.getId() ?? '';
+      return [id, await getPostVoteState(mx, room.roomId, id)] as const;
+    });
+    setCommentVotes(new Map(voteEntries));
     setCommentsLoading(false);
   }, [mx, room.roomId, eventId]);
 
@@ -242,6 +266,34 @@ export function PostPage() {
     },
     [mx, room.roomId, eventId]
   );
+
+  const handleCommentVote = useCallback(
+    (commentId: string, vote: PostVote) => {
+      setCommentVotes((prev) => {
+        const state = prev.get(commentId) ?? NO_VOTES;
+        const next = togglePostVote(mx, room.roomId, commentId, state, vote);
+        const nextMap = new Map(prev);
+        nextMap.set(commentId, next);
+        return nextMap;
+      });
+    },
+    [mx, room.roomId]
+  );
+
+  const sortedComments = useMemo(() => {
+    const list = [...comments];
+    if (commentSort === 'top') {
+      list.sort((a, b) => {
+        const aId = a.getId() ?? '';
+        const bId = b.getId() ?? '';
+        const scoreDiff = getPostScore(commentVotes.get(bId) ?? NO_VOTES) - getPostScore(commentVotes.get(aId) ?? NO_VOTES);
+        return scoreDiff || a.getTs() - b.getTs();
+      });
+    } else {
+      list.sort((a, b) => b.getTs() - a.getTs());
+    }
+    return list;
+  }, [comments, commentSort, commentVotes]);
 
   const renderPost = () => {
     if (post === undefined) {
@@ -272,6 +324,12 @@ export function PostPage() {
         : undefined;
     const title = getPostTitle(content);
     const preview = getPostBody(content);
+    const isPinned = pinnedIds.includes(eventId ?? '');
+
+    const handleOpenProfile = (evt: React.MouseEvent<HTMLButtonElement>) => {
+      evt.stopPropagation();
+      if (sender) navigate(getProfilePath(sender));
+    };
 
     const renderComments = () => {
       if (commentsLoading) {
@@ -288,14 +346,19 @@ export function PostPage() {
           </Text>
         );
       }
-      return comments.map((comment) => (
-        <CommentItem
-          key={comment.getId()}
-          room={room}
-          event={comment}
-          parserOptions={parserOptions}
-        />
-      ));
+      return sortedComments.map((comment) => {
+        const id = comment.getId() ?? '';
+        return (
+          <CommentItem
+            key={id}
+            room={room}
+            event={comment}
+            parserOptions={parserOptions}
+            voteState={commentVotes.get(id) ?? NO_VOTES}
+            onVote={(vote) => handleCommentVote(id, vote)}
+          />
+        );
+      });
     };
 
     return (
@@ -311,9 +374,31 @@ export function PostPage() {
               <Box gap="200" alignItems="Start">
                 <VoteColumn state={voteState} onVote={handleVote} />
                 <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
-                  <Text size="T200" priority="400">
-                    r/{roomName} · {authorName} · {relativeTime(post.getTs())}
-                  </Text>
+                  <Box gap="100" alignItems="Center">
+                    <Box grow="Yes" style={{ minWidth: 0 }}>
+                      <Text size="T200" priority="400" truncate>
+                        r/{roomName} ·{' '}
+                        <button
+                          type="button"
+                          onClick={handleOpenProfile}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            color: 'inherit',
+                            font: 'inherit',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          {authorName}
+                        </button>{' '}
+                        · {relativeTime(post.getTs())}
+                      </Text>
+                    </Box>
+                    {isPinned && <Icon size="100" src={Icons.Pin} aria-label="Pinned post" />}
+                    <PostMenu room={room} event={post} />
+                  </Box>
                   <Text size="H4">{title}</Text>
                   {preview && (
                     <RenderBody
@@ -327,9 +412,29 @@ export function PostPage() {
               </Box>
             </SequenceCard>
 
-            <Text size="L400">
-              {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
-            </Text>
+            <Box gap="200" alignItems="Center">
+            <Box grow="Yes">
+              <Text size="L400">
+                {comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}
+              </Text>
+            </Box>
+              <Chip
+                variant={commentSort === 'top' ? 'Primary' : 'Secondary'}
+                outlined={commentSort === 'top'}
+                radii="Pill"
+                onClick={() => setCommentSort('top')}
+              >
+                <Text size="B300">Top</Text>
+              </Chip>
+              <Chip
+                variant={commentSort === 'new' ? 'Primary' : 'Secondary'}
+                outlined={commentSort === 'new'}
+                radii="Pill"
+                onClick={() => setCommentSort('new')}
+              >
+                <Text size="B300">New</Text>
+              </Chip>
+            </Box>
             {renderComments()}
           </Box>
         </Scroll>

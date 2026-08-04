@@ -24,6 +24,7 @@ import {
   _LOBBY_PATH,
   _NOTIFICATIONS_PATH,
   _POST_PATH,
+  _PROFILE_PATH,
   _ROOM_PATH,
   _SEARCH_PATH,
   CREATE_PATH,
@@ -39,7 +40,7 @@ import {
   getSpaceLobbyPath,
 } from './pathUtils';
 import { ClientBindAtoms, ClientLayout, ClientRoot } from './client';
-import { Feed, HomeRouteRoomProvider, HomeSearch, PostPage } from './client/home';
+import { Feed, HomeRouteRoomProvider, HomeSearch, PostPage, ProfilePage } from './client/home';
 import { Recent, RecentRouteRoomProvider } from './client/recent';
 import { Direct, DirectCreate, DirectRouteRoomProvider } from './client/direct';
 import { RouteSpaceProvider, Space, SpaceRouteRoomProvider, SpaceSearch } from './client/space';
@@ -211,6 +212,7 @@ export const createRouter = (clientConfig: ClientConfig, screenSize: ScreenSize)
               </HomeRouteRoomProvider>
             }
           />
+          <Route path={_PROFILE_PATH} element={<ProfilePage />} />
         </Route>
         <Route
           path={DIRECT_PATH}
