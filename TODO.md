@@ -31,12 +31,19 @@ Constraint: everything implementable with **only the Matrix homeserver (Synapse)
 ### 7. Pinned posts
 - 📌 badge on pinned posts; Pin/Unpin in the ⋯ menu (`m.room.pinned_events`, power-level gated). Pinned posts sort to the top of every feed tab.
 
-## Server-side items (need admin session, not code)
+## Server-side items — status 2026-08-04
 
-- [ ] **Space join rule is `knock`** — new users can't join outright, only request membership. Flip to `public`:
-  `PUT /_matrix/client/v3/rooms/!y0BHB4cmD2DaPooiNn:matrix.iiit.ac.in/state/m.room.join_rules` with `{"join_rule": "public"}` (admin power in the space).
-- [ ] **More subreddits** — the space subtree currently holds only `#general`. Add rooms (Interests, Mess, Language Club…) as `m.space.child` state events on the space; the feed picks them up automatically. Creating a room: `POST /_matrix/client/v3/createRoom` then link it with `PUT .../state/m.space.child/<roomId>`.
-- [ ] **Report review** — monitor via Synapse admin API or admin console; not in-app.
+- [x] **Space join rule is `public`** — verified live (`join_rule: public`); new users join outright via the auto-join. No action needed.
+- [x] **41 subreddit rooms linked under the space** — all named non-direct community rooms (Mess Buy Sell, Palash & Bakul Discussions, Kadamba Discussions, Referrals, Mess Announcements, Politics, Anime, Jobs | Internships | Freelancing, …) added as `m.space.child` of `!y0BHB4cmD2DaPooiNn`. The feed picks them up automatically.
+- [ ] **Report review** — not in-app: Tuwunel's admin API replaces Synapse's `/_synapse/admin/v1/event_reports`; check its admin docs before building on it.
+
+## Infrastructure notes (discovered during verification)
+
+- The homeserver is **Tuwunel 1.8.2** (Rust, conduwuit successor), NOT Synapse — adjust any Synapse-specific assumptions (push gateway, admin APIs, moderation docs).
+- Tuwunel redact endpoint: `PUT /rooms/{roomId}/redact/{eventId}/{txnId}` (spec-correct; the SDK already does this).
+- Space hierarchy API paginates (server default 10/page) — the feed now walks `from` tokens.
+- On the campus network `matrix.iiit.ac.in` resolves to a private IP; modern Chrome blocks public→private fetches (Private Network Access). Off-campus users are unaffected. If on-campus users report an empty app, the fix is server-side (PNA opt-in header) or public DNS.
+- Local UI testing: `scripts/verify-ui.mjs` (playwright, creds from `.env`, needs `--disable-web-security` on campus).
 
 ## Deferred / known limits
 
