@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Chip, Icon, IconButton, Icons, Scroll, Spinner, Text, config } from 'folds';
+import { Box, Chip, Icon, IconButton, Icons, Scroll, Spinner, Text, config, toRem } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { VoteColumn } from '../../../components/post/VoteColumn';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -181,7 +181,11 @@ export function Feed() {
         <Box
           direction="Column"
           gap="200"
-          style={{ padding: `${config.space.S200} ${isMobile ? config.space.S200 : config.space.S300}` }}
+          style={{
+            maxWidth: toRem(760),
+            margin: '0 auto',
+            padding: `${config.space.S200} ${isMobile ? config.space.S200 : config.space.S300}`,
+          }}
         >
           {renderFeedContent()}
         </Box>
