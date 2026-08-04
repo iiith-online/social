@@ -56,6 +56,21 @@ const mapEvent = async (mx: MatrixClient, raw: Partial<IEvent>): Promise<MatrixE
   return decryptEvent(mx, mEvent);
 };
 
+// Replies may carry their relation inside the encrypted payload or in the
+// plaintext part of the event; check both so no reply is mistaken for a post.
+export const getEventRelation = (evt: MatrixEvent): Record<string, unknown> | undefined =>
+  (evt.getContent()?.['m.relates_to'] as Record<string, unknown> | undefined) ??
+  (evt.getWireContent()?.['m.relates_to'] as Record<string, unknown> | undefined);
+
+export const getInReplyToEventId = (
+  relation: Record<string, unknown> | undefined
+): string | undefined => {
+  const inReplyTo = relation?.['m.in_reply_to'];
+  if (!inReplyTo || typeof inReplyTo !== 'object') return undefined;
+  const eventId = (inReplyTo as Record<string, unknown>)['event_id'];
+  return typeof eventId === 'string' ? eventId : undefined;
+};
+
 // Every message in a community room is a post. Replies (thread or inline)
 // and edits are not posts — they are comments on the message they target.
 const isPostEvent = (evt: MatrixEvent): boolean => {
@@ -66,7 +81,7 @@ const isPostEvent = (evt: MatrixEvent): boolean => {
   }
   const content = evt.getContent();
   if (typeof content?.body !== 'string' || !content.body.trim()) return false;
-  const relation = content['m.relates_to'];
+  const relation = getEventRelation(evt);
   if (!relation) return true;
   return !(
     relation.rel_type === RelationType.Thread ||
@@ -126,10 +141,10 @@ export const getRoomPosts = async (
   const inlineComments = new Map<string, number>();
   events.forEach((evt) => {
     if (evt.isDecryptionFailure()) return;
-    const relation = evt.getContent()?.['m.relates_to'];
+    const relation = getEventRelation(evt);
     if (!relation || relation.rel_type === RelationType.Thread) return;
-    const target = relation['m.in_reply_to']?.event_id;
-    if (typeof target !== 'string') return;
+    const target = getInReplyToEventId(relation);
+    if (!target) return;
     inlineComments.set(target, (inlineComments.get(target) ?? 0) + 1);
   });
 

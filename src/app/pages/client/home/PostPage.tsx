@@ -24,6 +24,7 @@ import { RenderBody } from '../../../components/message';
 import { useRoom } from '../../../hooks/useRoom';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useRoomEvent } from '../../../hooks/useRoomEvent';
+import { getEventRelation, getInReplyToEventId } from './useFeedPosts';
 import { useRoomName } from '../../../hooks/useRoomMeta';
 import { getMemberDisplayName } from '../../../utils/room';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
@@ -196,11 +197,11 @@ export function PostPage() {
     }
     const inlineReplies = windowEvents.filter((evt) => {
       if (evt.isDecryptionFailure()) return false;
-      const relation = evt.getContent()?.['m.relates_to'];
+      const relation = getEventRelation(evt);
       return (
         relation &&
         relation.rel_type !== RelationType.Thread &&
-        relation['m.in_reply_to']?.event_id === eventId
+        getInReplyToEventId(relation) === eventId
       );
     });
     const all = [
