@@ -67,7 +67,7 @@ export const getInReplyToEventId = (
 ): string | undefined => {
   const inReplyTo = relation?.['m.in_reply_to'];
   if (!inReplyTo || typeof inReplyTo !== 'object') return undefined;
-  const eventId = (inReplyTo as Record<string, unknown>)['event_id'];
+  const eventId = (inReplyTo as Record<string, unknown>).event_id;
   return typeof eventId === 'string' ? eventId : undefined;
 };
 
