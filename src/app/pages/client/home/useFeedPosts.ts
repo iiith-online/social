@@ -125,6 +125,7 @@ export const useFeedPosts = () => {
 
       const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
       const threadIds = getThreadRootIds(events);
+      console.log('[feed-debug]', room.roomId, 'events:', events.length, 'threadIds:', Array.from(threadIds));
       if (threadIds.size === 0) return [];
 
       const inWindowRoots = new Map<string, MatrixEvent>();
@@ -145,6 +146,15 @@ export const useFeedPosts = () => {
             return [threadId, undefined];
           }
         })
+      );
+      console.log(
+        '[feed-debug] roots:',
+        rootEntries.map(([tid, root]) => ({
+          tid: tid.slice(-8),
+          type: root?.getType(),
+          decryptionFailure: root?.isDecryptionFailure(),
+          body: root?.getContent()?.body?.slice(0, 30),
+        }))
       );
 
       return rootEntries
