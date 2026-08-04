@@ -14,7 +14,12 @@ import { settingsAtom } from '../../state/settings';
 import { allInvitesAtom } from '../../state/room-list/inviteList';
 import { usePreviousValue } from '../../hooks/usePreviousValue';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { COMMUNITY_SPACE_ID, COMMUNITY_SPACE_VIA_SERVERS } from '../../state/communitySpace';
+import {
+  COMMUNITY_SPACE_ID,
+  COMMUNITY_SPACE_VIA_SERVERS,
+  isRoomInCommunity,
+} from '../../state/communitySpace';
+import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { getInboxInvitesPath, getOriginBaseUrl, getRecentRoomPath } from '../pathUtils';
 import {
   getMemberDisplayName,
@@ -242,6 +247,7 @@ function MessageNotifications() {
   const notifRef = useRef<Notification>();
   const unreadCacheRef = useRef<Map<string, UnreadInfo>>(new Map());
   const mx = useMatrixClient();
+  const roomToParents = useAtomValue(roomToParentsAtom);
   const [showNotifications] = useSetting(settingsAtom, 'showNotifications');
   const [notifyWhenActive] = useSetting(settingsAtom, 'notifyWhenActive');
   const [notificationSound] = useSetting(settingsAtom, 'isNotificationSounds');
@@ -309,6 +315,7 @@ function MessageNotifications() {
         !room ||
         !data.liveEvent ||
         room.isSpaceRoom() ||
+        !isRoomInCommunity(roomToParents, room.roomId) ||
         !isNotificationEvent(mEvent) ||
         getNotificationType(mx, room.roomId) === NotificationType.Mute
       ) {
@@ -359,6 +366,7 @@ function MessageNotifications() {
     notificationSound,
     notificationSelected,
     notifyWhenActive,
+    roomToParents,
     showNotifications,
     playSound,
     notify,
