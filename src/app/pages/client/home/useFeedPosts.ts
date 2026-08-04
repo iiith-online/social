@@ -261,8 +261,18 @@ export const useFeedPosts = () => {
     [mx]
   );
 
+  // Rooms hydrate from the sync store asynchronously after login; retry until
+  // the client knows them (bounded), so the first feed load isn't empty.
+  const waitForCommunityRooms = (attemptsLeft: number): Promise<string[]> =>
+    fetchCommunityRoomIds().then((ids) => {
+      if (ids.length > 0 || attemptsLeft <= 0) return ids;
+      const { promise, resolve } = Promise.withResolvers<void>();
+      window.setTimeout(resolve, 500);
+      return promise.then(() => waitForCommunityRooms(attemptsLeft - 1));
+    });
+
   const load = useCallback(async () => {
-    const ids = await fetchCommunityRoomIds();
+    const ids = await waitForCommunityRooms(20);
     console.log('[feed-debug] hierarchy ids:', JSON.stringify(ids));
 
     const rooms = ids
