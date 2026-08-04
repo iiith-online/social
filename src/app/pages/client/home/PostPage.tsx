@@ -89,15 +89,15 @@ function CommentComposer({ roomId, eventId, onSent }: CommentComposerProps) {
   const mx = useMatrixClient();
   const [text, setText] = useState('');
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const body = text.trim();
     if (!body) return;
     // Passing the post event id as threadId makes the SDK attach the
     // m.thread relation (with an m.in_reply_to fallback) automatically.
-    mx.sendEvent(roomId, eventId, EventType.RoomMessage, {
+    await mx.sendEvent(roomId, eventId, EventType.RoomMessage, {
       msgtype: MsgType.Text,
       body,
-    });
+    }).catch(() => undefined);
     setText('');
     onSent();
   };

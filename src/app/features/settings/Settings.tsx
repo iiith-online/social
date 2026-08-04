@@ -88,7 +88,7 @@ const useSettingsUtilityItems = (): SettingsMenuItem[] =>
     () => [
       {
         page: SettingsPages.OptionsPage,
-        name: 'Options',
+        name: 'Updates',
         icon: Icons.Setting,
       },
       {
@@ -241,7 +241,7 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
                     activePage={activePage}
                     onSelect={setActivePage}
                   />
-                  <Line variant="Surface" size="300" />
+                  {/* <Line variant="Surface" size="300" /> */}
                   <SettingsMenuItems
                     items={utilityItems}
                     activePage={activePage}
