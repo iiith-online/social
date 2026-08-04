@@ -97,16 +97,6 @@ export const useFeedPosts = () => {
   const fetchCommunityRoomIds = useCallback(async (): Promise<string[]> => {
     try {
       const hierarchy = await mx.getRoomHierarchy(COMMUNITY_SPACE_ID);
-      console.log(
-        '[feed-debug] hierarchy raw:',
-        hierarchy.rooms.length,
-        hierarchy.rooms.map((r) => ({
-          id: r.room_id.slice(-8),
-          type: r.room_type,
-          inClient: Boolean(mx.getRoom(r.room_id)),
-          isSpace: mx.getRoom(r.room_id)?.isSpaceRoom(),
-        }))
-      );
       return hierarchy.rooms
         .map((room) => room.room_id)
         .filter((roomId) => {
@@ -135,7 +125,6 @@ export const useFeedPosts = () => {
 
       const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
       const threadIds = getThreadRootIds(events);
-      console.log('[feed-debug]', room.roomId, 'events:', events.length, 'threadIds:', JSON.stringify(Array.from(threadIds)));
       if (threadIds.size === 0) return [];
 
       const inWindowRoots = new Map<string, MatrixEvent>();
@@ -156,17 +145,6 @@ export const useFeedPosts = () => {
             return [threadId, undefined];
           }
         })
-      );
-      console.log(
-        '[feed-debug] roots:',
-        JSON.stringify(
-          rootEntries.map(([tid, root]) => ({
-            tid: tid.slice(-8),
-            type: root?.getType(),
-            decryptionFailure: root?.isDecryptionFailure(),
-            body: root?.getContent()?.body?.slice(0, 30),
-          }))
-        )
       );
 
       return rootEntries
@@ -263,17 +241,19 @@ export const useFeedPosts = () => {
 
   // Rooms hydrate from the sync store asynchronously after login; retry until
   // the client knows them (bounded), so the first feed load isn't empty.
-  const waitForCommunityRooms = (attemptsLeft: number): Promise<string[]> =>
-    fetchCommunityRoomIds().then((ids) => {
-      if (ids.length > 0 || attemptsLeft <= 0) return ids;
-      const { promise, resolve } = Promise.withResolvers<void>();
-      window.setTimeout(resolve, 500);
-      return promise.then(() => waitForCommunityRooms(attemptsLeft - 1));
-    });
+  const waitForCommunityRooms = useCallback(
+    (attemptsLeft: number): Promise<string[]> =>
+      fetchCommunityRoomIds().then((ids) => {
+        if (ids.length > 0 || attemptsLeft <= 0) return ids;
+        const { promise, resolve } = Promise.withResolvers<void>();
+        window.setTimeout(resolve, 500);
+        return promise.then(() => waitForCommunityRooms(attemptsLeft - 1));
+      }),
+    [fetchCommunityRoomIds]
+  );
 
   const load = useCallback(async () => {
     const ids = await waitForCommunityRooms(20);
-    console.log('[feed-debug] hierarchy ids:', JSON.stringify(ids));
 
     const rooms = ids
       .map((roomId) => mx.getRoom(roomId))
@@ -285,7 +265,7 @@ export const useFeedPosts = () => {
     const enriched = await mapBatched(collected, 8, enrichPost);
 
     if (aliveRef.current) setPosts(enriched);
-  }, [mx, fetchCommunityRoomIds, getRoomPosts, enrichPost]);
+  }, [mx, waitForCommunityRooms, getRoomPosts, enrichPost]);
 
   useEffect(() => {
     aliveRef.current = true;
