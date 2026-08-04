@@ -10,3 +10,4 @@ devAssets
 
 .vercel
 .env*
+.agents

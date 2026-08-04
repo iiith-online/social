@@ -150,14 +150,15 @@ export const useFeedPosts = () => {
       return rootEntries
         .map(([threadId, root]) => ({ threadId, root }))
         .filter(
-          (entry): entry is { threadId: string; root: MatrixEvent } =>
-            Boolean(
-              entry.root &&
-                !entry.root.isDecryptionFailure() &&
-                entry.root.getType() === MessageEvent.RoomMessage &&
-                typeof entry.root.getContent()?.body === 'string' &&
-                (entry.root.getContent()?.body as string).trim()
-            )
+          (entry): entry is { threadId: string; root: MatrixEvent } => {
+            if (!entry.root || entry.root.isDecryptionFailure()) return false;
+            const type = entry.root.getType();
+            if (type !== MessageEvent.RoomMessage && type !== MessageEvent.RoomMessageEncrypted) {
+              return false;
+            }
+            const content = entry.root.getContent();
+            return typeof content?.body === 'string' && Boolean(content.body.trim());
+          }
         )
         .slice(0, MAX_POSTS_PER_ROOM)
         .map(({ threadId, root }) => ({
