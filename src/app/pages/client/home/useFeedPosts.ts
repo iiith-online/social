@@ -8,13 +8,12 @@ import {
   RelationType,
   Room,
 } from 'matrix-js-sdk';
-import { useAtomValue } from 'jotai';
 import to from 'await-to-js';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { allRoomsAtom } from '../../../state/room-list/roomList';
-import { mDirectAtom } from '../../../state/mDirectList';
 import { MessageEvent } from '../../../../types/matrix/room';
+
+export const COMMUNITY_SPACE_ID = '!y0BHB4cmD2DaPooiNn:matrix.iiit.ac.in';
 
 export const FEED_UP_KEY = '👍';
 export const FEED_DOWN_KEY = '👎';
@@ -89,13 +88,25 @@ type FeedRoomResult = FeedPost[];
 
 export const useFeedPosts = () => {
   const mx = useMatrixClient();
-  const roomIds = useAtomValue(allRoomsAtom);
-  const mDirects = useAtomValue(mDirectAtom);
 
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const aliveRef = useRef(true);
+
+  const fetchCommunityRoomIds = useCallback(async (): Promise<string[]> => {
+    try {
+      const hierarchy = await mx.getRoomHierarchy(COMMUNITY_SPACE_ID);
+      return hierarchy.rooms
+        .map((room) => room.room_id)
+        .filter((roomId) => {
+          const room = mx.getRoom(roomId);
+          return Boolean(room && !room.isSpaceRoom());
+        });
+    } catch {
+      return [];
+    }
+  }, [mx]);
 
   const getRoomPosts = useCallback(
     async (room: Room): Promise<FeedRoomResult> => {
@@ -228,11 +239,11 @@ export const useFeedPosts = () => {
   );
 
   const load = useCallback(async () => {
-    const rooms = roomIds
+    const ids = await fetchCommunityRoomIds();
+
+    const rooms = ids
       .map((roomId) => mx.getRoom(roomId))
-      .filter(
-        (room): room is Room => Boolean(room && !room.isSpaceRoom() && !mDirects.has(room.roomId))
-      )
+      .filter((room): room is Room => Boolean(room))
       .slice(0, MAX_ROOMS);
 
     const roomPosts = await mapBatched(rooms, 5, getRoomPosts);
@@ -240,7 +251,7 @@ export const useFeedPosts = () => {
     const enriched = await mapBatched(collected, 8, enrichPost);
 
     if (aliveRef.current) setPosts(enriched);
-  }, [mx, roomIds, mDirects, getRoomPosts, enrichPost]);
+  }, [mx, fetchCommunityRoomIds, getRoomPosts, enrichPost]);
 
   useEffect(() => {
     aliveRef.current = true;

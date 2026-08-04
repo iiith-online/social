@@ -11,9 +11,7 @@ import {
 import {
   DirectTab,
   HomeTab,
-  SpaceTabs,
   InboxTab,
-  ExploreTab,
   SettingsTab,
   UnverifiedTab,
   SearchTab,
@@ -32,11 +30,6 @@ export function SidebarNav() {
             <SidebarStack>
               <HomeTab />
               <DirectTab />
-            </SidebarStack>
-            <SpaceTabs scrollRef={scrollRef} />
-            <SidebarStackSeparator />
-            <SidebarStack>
-              <ExploreTab />
             </SidebarStack>
           </Scroll>
         }
