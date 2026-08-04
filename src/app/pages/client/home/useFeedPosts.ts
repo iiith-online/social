@@ -11,9 +11,8 @@ import {
 import to from 'await-to-js';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { COMMUNITY_SPACE_ID } from '../../../state/communitySpace';
 import { MessageEvent } from '../../../../types/matrix/room';
-
-export const COMMUNITY_SPACE_ID = '!y0BHB4cmD2DaPooiNn:matrix.iiit.ac.in';
 
 export const FEED_UP_KEY = '👍';
 export const FEED_DOWN_KEY = '👎';

@@ -2,6 +2,7 @@ import { useAtomValue } from 'jotai';
 import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MatrixClient, MatrixEvent, Room, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
+import { KnownMembership } from 'matrix-js-sdk/lib/@types/membership';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 import AppIcon from '../../../../public/icons/web/icon-512.png';
@@ -13,6 +14,7 @@ import { settingsAtom } from '../../state/settings';
 import { allInvitesAtom } from '../../state/room-list/inviteList';
 import { usePreviousValue } from '../../hooks/usePreviousValue';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { COMMUNITY_SPACE_ID, COMMUNITY_SPACE_VIA_SERVERS } from '../../state/communitySpace';
 import { getInboxInvitesPath, getOriginBaseUrl, getRecentRoomPath } from '../pathUtils';
 import {
   getMemberDisplayName,
@@ -36,6 +38,47 @@ function SystemEmojiFeature() {
   } else {
     document.documentElement.style.setProperty('--font-emoji', 'Twemoji_DISABLED');
   }
+
+  return null;
+}
+
+// Make every user a member (or pending member) of the community space on open.
+// The space uses the knock join rule, so users who cannot join outright get a
+// knock request sent instead, which a space admin can approve.
+function AutoJoinCommunitySpace() {
+  const mx = useMatrixClient();
+
+  useEffect(() => {
+    const joinOrKnock = async (attemptsLeft: number): Promise<void> => {
+      // Rooms hydrate from the sync store asynchronously after login.
+      const space = mx.getRoom(COMMUNITY_SPACE_ID);
+      if (!space && attemptsLeft > 0) {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        window.setTimeout(resolve, 500);
+        await promise;
+        return joinOrKnock(attemptsLeft - 1);
+      }
+
+      const membership = space?.getMyMembership();
+      if (membership === KnownMembership.Join || membership === KnownMembership.Knock) {
+        return undefined;
+      }
+
+      try {
+        await mx.joinRoom(COMMUNITY_SPACE_ID, { viaServers: COMMUNITY_SPACE_VIA_SERVERS });
+      } catch (err) {
+        const errcode = (err as { errcode?: string } | null)?.errcode;
+        if (errcode === 'M_FORBIDDEN') {
+          await mx
+            .knockRoom(COMMUNITY_SPACE_ID, { viaServers: COMMUNITY_SPACE_VIA_SERVERS })
+            .catch(() => undefined);
+        }
+      }
+      return undefined;
+    };
+
+    joinOrKnock(10);
+  }, [mx]);
 
   return null;
 }
@@ -402,6 +445,7 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
   return (
     <>
       <SystemEmojiFeature />
+      <AutoJoinCommunitySpace />
       <FaviconUpdater />
       <PushNotificationReconciler />
       <InviteNotifications />
