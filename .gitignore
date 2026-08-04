@@ -11,3 +11,9 @@ devAssets
 .vercel
 .env*
 .agents
+
+# local verification artifacts
+.verify-profile/
+.verify-shots/
+.verify-log.txt
+.verify-state.json

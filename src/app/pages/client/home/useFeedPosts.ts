@@ -132,18 +132,39 @@ export const mapBatched = <T, R>(
         mapBatched(items.slice(batchSize), batchSize, fn).then((tail) => [...head, ...tail])
       );
 
+const HIERARCHY_PAGE_SIZE = 100;
+
+// The hierarchy API is paginated (server default page is 10 rooms), so walk
+// `from` tokens until exhausted, then filter to joined non-space rooms.
+const fetchHierarchyPage = (
+  mx: MatrixClient,
+  from: string | undefined,
+  acc: string[]
+): Promise<string[]> =>
+  mx
+    .getRoomHierarchy(COMMUNITY_SPACE_ID, HIERARCHY_PAGE_SIZE, undefined, false, from)
+    .then((hierarchy) => {
+      const roomIds = hierarchy.rooms
+        .filter((room) => !room.room_type)
+        .map((room) => room.room_id);
+      const collected = acc.concat(roomIds);
+      // The SDK's IRoomHierarchy types the pagination token as `next_batch`,
+      // but the API (and runtime response) uses `next_token`.
+      const nextToken =
+        'next_token' in hierarchy && typeof hierarchy.next_token === 'string'
+          ? hierarchy.next_token
+          : undefined;
+      if (!nextToken) return collected;
+      return fetchHierarchyPage(mx, nextToken, collected);
+    })
+    .catch(() => acc);
+
 export const fetchCommunityRoomIds = async (mx: MatrixClient): Promise<string[]> => {
-  try {
-    const hierarchy = await mx.getRoomHierarchy(COMMUNITY_SPACE_ID);
-    return hierarchy.rooms
-      .map((room) => room.room_id)
-      .filter((roomId) => {
-        const room = mx.getRoom(roomId);
-        return Boolean(room && !room.isSpaceRoom());
-      });
-  } catch {
-    return [];
-  }
+  const roomIds = await fetchHierarchyPage(mx, undefined, []);
+  return roomIds.filter((roomId) => {
+    const room = mx.getRoom(roomId);
+    return Boolean(room && !room.isSpaceRoom());
+  });
 };
 
 // Fetches one page of room history (newest first). `fromToken` is the
