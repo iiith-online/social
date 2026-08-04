@@ -29,6 +29,7 @@ export const getPostVoteState = async (
   try {
     const reactions = await mx.relations(roomId, eventId, RelationType.Annotation, EventType.Reaction);
     reactions.events.forEach((evt) => {
+      if (evt.isRedacted()) return;
       const key = evt.getContent()?.['m.relates_to']?.key;
       const sender = evt.getSender();
       if (key === POST_UP_KEY) {

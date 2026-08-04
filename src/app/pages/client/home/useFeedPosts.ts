@@ -140,7 +140,7 @@ export const getRoomPosts = async (
   // Count them from the fetched window so they still register as comments.
   const inlineComments = new Map<string, number>();
   events.forEach((evt) => {
-    if (evt.isDecryptionFailure()) return;
+    if (evt.isDecryptionFailure() || evt.isRedacted()) return;
     const relation = getEventRelation(evt);
     if (!relation || relation.rel_type === RelationType.Thread) return;
     const target = getInReplyToEventId(relation);
@@ -190,10 +190,12 @@ export const enrichPost = async (
         .catch(() => null),
     ]);
     threads?.events.forEach((evt) => {
+      if (evt.isRedacted()) return;
       const id = evt.getId();
       if (id) replyIds.add(id);
     });
     inlines?.events.forEach((evt) => {
+      if (evt.isRedacted()) return;
       const id = evt.getId();
       if (id) replyIds.add(id);
     });

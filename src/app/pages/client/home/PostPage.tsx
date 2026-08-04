@@ -196,7 +196,7 @@ export function PostPage() {
       // timeline not available
     }
     const inlineReplies = windowEvents.filter((evt) => {
-      if (evt.isDecryptionFailure()) return false;
+      if (evt.isDecryptionFailure() || evt.isRedacted()) return false;
       const relation = getEventRelation(evt);
       return (
         relation &&
@@ -219,7 +219,7 @@ export function PostPage() {
     );
     setComments(
       unique
-        .filter((evt) => !evt.isDecryptionFailure())
+        .filter((evt) => !evt.isDecryptionFailure() && !evt.isRedacted())
         .sort((a, b) => a.getTs() - b.getTs())
     );
     setCommentsLoading(false);
