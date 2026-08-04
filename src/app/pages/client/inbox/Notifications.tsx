@@ -73,6 +73,8 @@ import * as customHtmlCss from '../../../styles/CustomHtml.css';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { useRoomUnread } from '../../../state/hooks/unread';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
+import { roomToParentsAtom } from '../../../state/room/roomToParents';
+import { isRoomInCommunity } from '../../../state/communitySpace';
 import { markAsRead } from '../../../utils/notifications';
 import { ContainerColor } from '../../../styles/ContainerColor.css';
 import { VirtualTile } from '../../../components/virtualizer';
@@ -138,6 +140,7 @@ const useNotificationTimeline = (
   const mx = useMatrixClient();
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
+  const roomToParents = useAtomValue(roomToParentsAtom);
 
   const [notificationTimeline, setNotificationTimeline] = useState<NotificationTimeline>({
     groups: [],
@@ -165,7 +168,12 @@ const useNotificationTimeline = (
         paginationLimit,
         onlyHighlight ? 'highlight' : undefined
       );
-      const groups = groupNotifications(data.notifications, allJoinedRooms);
+      // The inbox lists only community space notifications; direct message
+      // pings surface through the chat UI instead.
+      const notifications = data.notifications.filter((notification) =>
+        isRoomInCommunity(roomToParents, notification.room_id)
+      );
+      const groups = groupNotifications(notifications, allJoinedRooms);
 
       setNotificationTimeline((currentTimeline) => {
         if (currentTimeline.nextToken === from) {
@@ -177,7 +185,7 @@ const useNotificationTimeline = (
         return currentTimeline;
       });
     },
-    [paginationLimit, onlyHighlight, fetchNotifications, allJoinedRooms]
+    [paginationLimit, onlyHighlight, fetchNotifications, allJoinedRooms, roomToParents]
   );
 
   /**
@@ -190,12 +198,15 @@ const useNotificationTimeline = (
       paginationLimit,
       onlyHighlight ? 'highlight' : undefined
     );
-    const groups = groupNotifications(data.notifications, allJoinedRooms);
+    const notifications = data.notifications.filter((notification) =>
+      isRoomInCommunity(roomToParents, notification.room_id)
+    );
+    const groups = groupNotifications(notifications, allJoinedRooms);
     setNotificationTimeline({
       nextToken: data.next_token,
       groups,
     });
-  }, [paginationLimit, onlyHighlight, fetchNotifications, allJoinedRooms]);
+  }, [paginationLimit, onlyHighlight, fetchNotifications, allJoinedRooms, roomToParents]);
 
   return [notificationTimeline, loadTimeline, silentReloadTimeline];
 };
