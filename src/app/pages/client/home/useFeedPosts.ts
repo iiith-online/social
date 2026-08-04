@@ -135,7 +135,7 @@ export const useFeedPosts = () => {
 
       const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
       const threadIds = getThreadRootIds(events);
-      console.log('[feed-debug]', room.roomId, 'events:', events.length, 'threadIds:', Array.from(threadIds));
+      console.log('[feed-debug]', room.roomId, 'events:', events.length, 'threadIds:', JSON.stringify(Array.from(threadIds)));
       if (threadIds.size === 0) return [];
 
       const inWindowRoots = new Map<string, MatrixEvent>();
@@ -261,7 +261,7 @@ export const useFeedPosts = () => {
 
   const load = useCallback(async () => {
     const ids = await fetchCommunityRoomIds();
-    console.log('[feed-debug] hierarchy ids:', ids.length, ids);
+    console.log('[feed-debug] hierarchy ids:', JSON.stringify(ids));
 
     const rooms = ids
       .map((roomId) => mx.getRoom(roomId))
