@@ -1,9 +1,11 @@
-import React, { ReactNode, useCallback, useMemo, useState } from 'react';
+import React, { ReactNode, useCallback, useMemo } from 'react';
+import { useAtom } from 'jotai';
 import { Box, Chip, Icon, IconButton, Icons, Scroll, Spinner, Text, config, toRem } from 'folds';
 import { FeedCard } from '../../../components/post/FeedCard';
 import { useScreenSizeContext, ScreenSize } from '../../../hooks/useScreenSize';
 import { PostVote } from '../../../utils/postVote';
-import { FEED_SORTS, FeedSort, sortFeedPosts } from '../../../utils/feedSort';
+import { FEED_SORTS, sortFeedPosts } from '../../../utils/feedSort';
+import { feedSortAtom } from '../../../state/feedSort';
 import { FeedPost, useFeedPosts } from './useFeedPosts';
 
 type FeedListProps = {
@@ -15,7 +17,7 @@ type FeedListProps = {
 export function FeedList({ posts, loading, onVote, toolbar }: FeedListProps) {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
-  const [sort, setSort] = useState<FeedSort>('recommended');
+  const [sort, setSort] = useAtom(feedSortAtom);
 
   const sortedPosts = useMemo(() => sortFeedPosts(posts, sort), [posts, sort]);
 

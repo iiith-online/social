@@ -1,7 +1,7 @@
 import React, { MouseEventHandler, forwardRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRem } from 'folds';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import FocusTrap from 'focus-trap-react';
 import { useOrphanRooms } from '../../../state/hooks/roomList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -26,6 +26,7 @@ import { markAsRead } from '../../../utils/notifications';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import { feedSortAtom } from '../../../state/feedSort';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -72,9 +73,11 @@ export function HomeTab() {
   const orphanRooms = useOrphanRooms(mx, allRoomsAtom, mDirects, roomToParents);
   const homeUnread = useRoomsUnread(orphanRooms, roomToUnreadAtom);
   const homeSelected = useHomeSelected();
+  const [feedSort, setFeedSort] = useAtom(feedSortAtom);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleHomeClick = () => {
+    setFeedSort('recommended');
     const activePath = navToActivePath.get('home');
     if (activePath && screenSize !== ScreenSize.Mobile) {
       navigate(joinPathComponent(activePath));
@@ -94,7 +97,7 @@ export function HomeTab() {
   };
 
   return (
-    <SidebarItem active={homeSelected}>
+    <SidebarItem active={homeSelected && feedSort === 'recommended'}>
       <SidebarItemTooltip tooltip="Home">
         {(triggerRef) => (
           <SidebarAvatar

@@ -25,7 +25,7 @@ export function PageRoot({ nav, children }: PageRootProps) {
       data-ui-option-page-root
     >
       {nav}
-      {screenSize !== ScreenSize.Mobile && (
+      {nav && screenSize !== ScreenSize.Mobile && (
         <Line variant="Background" size="300" direction="Vertical" />
       )}
       {children}

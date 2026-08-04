@@ -16,6 +16,8 @@ import {
   UnverifiedTab,
   SearchTab,
 } from './sidebar';
+import { RecentFeedTab, TopFeedTab } from './sidebar/FeedTabs';
+import { CommunityRoomsNav } from './sidebar/CommunityRoomsNav';
 import { SyncStatus } from './SyncStatus';
 
 export function SidebarNav() {
@@ -29,6 +31,15 @@ export function SidebarNav() {
           <Scroll ref={scrollRef} variant="Background" size="0">
             <SidebarStack>
               <HomeTab />
+              <RecentFeedTab />
+              <TopFeedTab />
+            </SidebarStack>
+            <SidebarStackSeparator />
+            <SidebarStack>
+              <CommunityRoomsNav />
+            </SidebarStack>
+            <SidebarStackSeparator />
+            <SidebarStack>
               <DirectTab />
               <SearchTab />
               <InboxTab />
