@@ -9,13 +9,6 @@ export type DateFormat =
   | 'YYYY-MM-DD'
   | '';
 export type MessageSpacing = '0' | '100' | '200' | '300' | '400' | '500';
-export type UiOption = 'auto' | 'matrix' | 'matrix-android';
-
-export const UI_OPTIONS: ReadonlyArray<{ id: UiOption; label: string }> = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'matrix', label: 'Vertical' },
-  { id: 'matrix-android', label: 'Horizontal' },
-];
 
 export enum MessageLayout {
   Modern = 0,
@@ -24,16 +17,9 @@ export enum MessageLayout {
 }
 
 export interface Settings {
-  uiOption: UiOption;
-  themeId?: string;
-  useSystemTheme: boolean;
-  lightThemeId?: string;
-  darkThemeId?: string;
-  monochromeMode?: boolean;
   isMarkdown: boolean;
   editorToolbar: boolean;
   twitterEmoji: boolean;
-  pageZoom: number;
   hideActivity: boolean;
 
   isPeopleDrawer: boolean;
@@ -63,16 +49,9 @@ export interface Settings {
 }
 
 const defaultSettings: Settings = {
-  uiOption: 'auto',
-  themeId: undefined,
-  useSystemTheme: true,
-  lightThemeId: undefined,
-  darkThemeId: undefined,
-  monochromeMode: false,
   isMarkdown: true,
   editorToolbar: false,
   twitterEmoji: true,
-  pageZoom: 100,
   hideActivity: false,
 
   isPeopleDrawer: true,
@@ -105,16 +84,9 @@ export const getSettings = () => {
   const settings = localStorage.getItem(STORAGE_KEY);
   if (settings === null) return defaultSettings;
   const savedSettings = JSON.parse(settings) as Partial<Settings>;
-  const uiOption: UiOption =
-    savedSettings.uiOption === 'auto' ||
-    savedSettings.uiOption === 'matrix' ||
-    savedSettings.uiOption === 'matrix-android'
-      ? savedSettings.uiOption
-      : 'auto';
   return {
     ...defaultSettings,
     ...savedSettings,
-    uiOption,
   };
 };
 

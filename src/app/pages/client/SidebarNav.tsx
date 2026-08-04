@@ -1,8 +1,6 @@
 import React, { useRef } from 'react';
-import { Box, Scroll, Text } from 'folds';
+import { Scroll } from 'folds';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
-import { useResolvedUiOption } from '../../hooks/useUiOption';
 
 import {
   Sidebar,
@@ -22,44 +20,9 @@ import {
 } from './sidebar';
 import { SyncStatus } from './SyncStatus';
 
-function MobileUiOptionNav() {
-  const labels = ['Home', 'Direct', 'Explore', 'Inbox', 'You'];
-  const tabs = [<HomeTab />, <DirectTab />, <ExploreTab />, <InboxTab />, <SettingsTab />];
-
-  return (
-    <Sidebar data-ui-option-mobile-sidebar>
-      <SidebarStack data-ui-option-mobile-nav role="navigation" aria-label="Primary navigation">
-        {tabs.map((tab, index) => (
-          <Box
-            key={labels[index]}
-            data-ui-option-mobile-tab
-            direction="Column"
-            alignItems="Center"
-            justifyContent="Center"
-            gap="100"
-            grow="Yes"
-            shrink="Yes"
-          >
-            {tab}
-            <Text data-ui-option-mobile-tab-label size="T200" priority="400" truncate>
-              {labels[index]}
-            </Text>
-          </Box>
-        ))}
-      </SidebarStack>
-    </Sidebar>
-  );
-}
-
 export function SidebarNav() {
   const mx = useMatrixClient();
-  const screenSize = useScreenSizeContext();
-  const uiOption = useResolvedUiOption();
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  if (screenSize === ScreenSize.Mobile && uiOption === 'matrix-android') {
-    return <MobileUiOptionNav />;
-  }
 
   return (
     <Sidebar>

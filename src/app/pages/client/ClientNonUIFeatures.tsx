@@ -40,18 +40,6 @@ function SystemEmojiFeature() {
   return null;
 }
 
-function PageZoomFeature() {
-  const [pageZoom] = useSetting(settingsAtom, 'pageZoom');
-
-  if (pageZoom === 100) {
-    document.documentElement.style.removeProperty('font-size');
-  } else {
-    document.documentElement.style.setProperty('font-size', `calc(1em * ${pageZoom / 100})`);
-  }
-
-  return null;
-}
-
 function FaviconUpdater() {
   useEffect(() => {
     setFavicon(AppIcon);
@@ -414,7 +402,6 @@ export function ClientNonUIFeatures({ children }: ClientNonUIFeaturesProps) {
   return (
     <>
       <SystemEmojiFeature />
-      <PageZoomFeature />
       <FaviconUpdater />
       <PushNotificationReconciler />
       <InviteNotifications />
