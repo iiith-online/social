@@ -159,12 +159,14 @@ export const useFeedPosts = () => {
       );
       console.log(
         '[feed-debug] roots:',
-        rootEntries.map(([tid, root]) => ({
-          tid: tid.slice(-8),
-          type: root?.getType(),
-          decryptionFailure: root?.isDecryptionFailure(),
-          body: root?.getContent()?.body?.slice(0, 30),
-        }))
+        JSON.stringify(
+          rootEntries.map(([tid, root]) => ({
+            tid: tid.slice(-8),
+            type: root?.getType(),
+            decryptionFailure: root?.isDecryptionFailure(),
+            body: root?.getContent()?.body?.slice(0, 30),
+          }))
+        )
       );
 
       return rootEntries
