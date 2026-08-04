@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { EventType, MatrixEvent, MsgType, RelationType } from 'matrix-js-sdk';
+import { Direction, EventType, MatrixEvent, MsgType, RelationType } from 'matrix-js-sdk';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import to from 'await-to-js';
 import {
@@ -171,7 +171,43 @@ export function PostPage() {
         .relations(room.roomId, eventId, 'm.in_reply_to', undefined, { limit: 200 })
         .catch(() => null),
     ]);
-    const all = [...(threads?.events ?? []), ...(inlines?.events ?? [])];
+    // The server does not index m.in_reply_to relations, so inline replies
+    // (how other clients reply) are invisible to the relations endpoint.
+    // Find them in the recent room timeline instead.
+    let windowEvents: MatrixEvent[] = [];
+    try {
+      const window = await mx.createMessagesRequest(
+        room.roomId,
+        null,
+        100,
+        Direction.Backward
+      );
+      windowEvents = await Promise.all(
+        window.chunk.map(async (raw) => {
+          const mEvent = new MatrixEvent(raw);
+          if (mEvent.isEncrypted() && mx.getCrypto()) {
+            await to(mEvent.attemptDecryption(mx.getCrypto() as CryptoBackend));
+          }
+          return mEvent;
+        })
+      );
+    } catch {
+      // timeline not available
+    }
+    const inlineReplies = windowEvents.filter((evt) => {
+      if (evt.isDecryptionFailure()) return false;
+      const relation = evt.getContent()?.['m.relates_to'];
+      return (
+        relation &&
+        relation.rel_type !== RelationType.Thread &&
+        relation['m.in_reply_to']?.event_id === eventId
+      );
+    });
+    const all = [
+      ...(threads?.events ?? []),
+      ...(inlines?.events ?? []),
+      ...inlineReplies,
+    ];
     const unique = Array.from(new Map(all.map((evt) => [evt.getId(), evt])).values());
     await Promise.all(
       unique.map(async (evt) => {

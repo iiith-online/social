@@ -104,7 +104,7 @@ export const fetchCommunityRoomIds = async (mx: MatrixClient): Promise<string[]>
 export const getRoomPosts = async (
   mx: MatrixClient,
   room: Room
-): Promise<FeedPost[]> => {
+): Promise<{ posts: FeedPost[]; inlineComments: Map<string, number> }> => {
   let chunk: Partial<IEvent>[] = [];
   try {
     const result = await mx.createMessagesRequest(
@@ -115,27 +115,48 @@ export const getRoomPosts = async (
     );
     chunk = result.chunk;
   } catch {
-    return [];
+    return { posts: [], inlineComments: new Map() };
   }
 
   const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
-  return events
-    .filter(isPostEvent)
-    .filter((evt) => Boolean(evt.getId()))
-    .slice(0, MAX_POSTS_PER_ROOM)
-    .map((root) => ({
-      roomId: room.roomId,
-      eventId: root.getId() ?? '',
-      root,
-      upvotes: 0,
-      downvotes: 0,
-      myVote: undefined,
-      myReactionId: undefined,
-      replyCount: 0,
-    }));
+
+  // The server does not index m.in_reply_to relations, so inline replies
+  // (how other clients reply) never surface via the relations endpoint.
+  // Count them from the fetched window so they still register as comments.
+  const inlineComments = new Map<string, number>();
+  events.forEach((evt) => {
+    if (evt.isDecryptionFailure()) return;
+    const relation = evt.getContent()?.['m.relates_to'];
+    if (!relation || relation.rel_type === RelationType.Thread) return;
+    const target = relation['m.in_reply_to']?.event_id;
+    if (typeof target !== 'string') return;
+    inlineComments.set(target, (inlineComments.get(target) ?? 0) + 1);
+  });
+
+  return {
+    posts: events
+      .filter(isPostEvent)
+      .filter((evt) => Boolean(evt.getId()))
+      .slice(0, MAX_POSTS_PER_ROOM)
+      .map((root) => ({
+        roomId: room.roomId,
+        eventId: root.getId() ?? '',
+        root,
+        upvotes: 0,
+        downvotes: 0,
+        myVote: undefined,
+        myReactionId: undefined,
+        replyCount: 0,
+      })),
+    inlineComments,
+  };
 };
 
-export const enrichPost = async (mx: MatrixClient, post: FeedPost): Promise<FeedPost> => {
+export const enrichPost = async (
+  mx: MatrixClient,
+  post: FeedPost,
+  inlineComments?: Map<string, number>
+): Promise<FeedPost> => {
   const voteState = await getPostVoteState(mx, post.roomId, post.eventId);
 
   // Comments are replies: thread relations plus inline replies, deduped.
@@ -172,7 +193,7 @@ export const enrichPost = async (mx: MatrixClient, post: FeedPost): Promise<Feed
     downvotes,
     myVote: voteState.myVote,
     myReactionId: voteState.myReactionId,
-    replyCount: replyIds.size,
+    replyCount: replyIds.size + (inlineComments?.get(post.eventId) ?? 0),
   };
 };
 
@@ -233,9 +254,20 @@ export const useFeedPosts = () => {
       .map((roomId) => mx.getRoom(roomId))
       .filter((room): room is Room => Boolean(room));
 
-    const roomPosts = await mapBatched(rooms, 5, (room) => getRoomPosts(mx, room));
-    const collected = roomPosts.flat().slice(0, MAX_POSTS);
-    const enriched = await mapBatched(collected, 8, (post) => enrichPost(mx, post));
+    const roomResults = await mapBatched(rooms, 5, (room) => getRoomPosts(mx, room));
+    const inlineComments = roomResults.reduce(
+      (merged, result) => {
+        result.inlineComments.forEach((count, target) => {
+          merged.set(target, (merged.get(target) ?? 0) + count);
+        });
+        return merged;
+      },
+      new Map<string, number>()
+    );
+    const collected = roomResults.flatMap((result) => result.posts).slice(0, MAX_POSTS);
+    const enriched = await mapBatched(collected, 8, (post) =>
+      enrichPost(mx, post, inlineComments)
+    );
 
     setPosts(enriched);
     setLoading(false);
@@ -261,8 +293,10 @@ export const useRoomPosts = (roomId: string) => {
       setLoading(false);
       return;
     }
-    const roomPosts = await getRoomPosts(mx, room);
-    const enriched = await mapBatched(roomPosts, 8, (post) => enrichPost(mx, post));
+    const { posts: roomPosts, inlineComments } = await getRoomPosts(mx, room);
+    const enriched = await mapBatched(roomPosts, 8, (post) =>
+      enrichPost(mx, post, inlineComments)
+    );
     setPosts(enriched);
     setLoading(false);
   }, [mx, roomId]);
