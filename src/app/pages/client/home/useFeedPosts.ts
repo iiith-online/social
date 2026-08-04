@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Dispatch,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   Direction,
   IEvent,
@@ -28,7 +35,6 @@ export type FeedPost = {
 };
 
 const TIMELINE_LIMIT = 100;
-const MAX_ROOMS = 60;
 const MAX_POSTS_PER_ROOM = 20;
 const MAX_POSTS = 60;
 const RELATIONS_LIMIT = 100;
@@ -81,171 +87,189 @@ const mapBatched = <T, R>(
         mapBatched(items.slice(batchSize), batchSize, fn).then((tail) => [...head, ...tail])
       );
 
-type FeedRoomResult = FeedPost[];
+export const fetchCommunityRoomIds = async (mx: MatrixClient): Promise<string[]> => {
+  try {
+    const hierarchy = await mx.getRoomHierarchy(COMMUNITY_SPACE_ID);
+    return hierarchy.rooms
+      .map((room) => room.room_id)
+      .filter((roomId) => {
+        const room = mx.getRoom(roomId);
+        return Boolean(room && !room.isSpaceRoom());
+      });
+  } catch {
+    return [];
+  }
+};
+
+export const getRoomPosts = async (
+  mx: MatrixClient,
+  room: Room
+): Promise<FeedPost[]> => {
+  let chunk: Partial<IEvent>[] = [];
+  try {
+    const result = await mx.createMessagesRequest(
+      room.roomId,
+      null,
+      TIMELINE_LIMIT,
+      Direction.Backward
+    );
+    chunk = result.chunk;
+  } catch {
+    return [];
+  }
+
+  const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
+  return events
+    .filter(isPostEvent)
+    .filter((evt) => Boolean(evt.getId()))
+    .slice(0, MAX_POSTS_PER_ROOM)
+    .map((root) => ({
+      roomId: room.roomId,
+      eventId: root.getId() ?? '',
+      root,
+      upvotes: 0,
+      downvotes: 0,
+      myVote: undefined,
+      myReactionId: undefined,
+      replyCount: 0,
+    }));
+};
+
+export const enrichPost = async (mx: MatrixClient, post: FeedPost): Promise<FeedPost> => {
+  const voteState = await getPostVoteState(mx, post.roomId, post.eventId);
+
+  // Comments are replies: thread relations plus inline replies, deduped.
+  const replyIds = new Set<string>();
+  try {
+    const [threads, inlines] = await Promise.all([
+      mx
+        .relations(post.roomId, post.eventId, RelationType.Thread, undefined, {
+          limit: RELATIONS_LIMIT,
+        })
+        .catch(() => null),
+      mx
+        .relations(post.roomId, post.eventId, 'm.in_reply_to', undefined, {
+          limit: RELATIONS_LIMIT,
+        })
+        .catch(() => null),
+    ]);
+    threads?.events.forEach((evt) => {
+      const id = evt.getId();
+      if (id) replyIds.add(id);
+    });
+    inlines?.events.forEach((evt) => {
+      const id = evt.getId();
+      if (id) replyIds.add(id);
+    });
+  } catch {
+    // no replies visible
+  }
+
+  const { upvotes, downvotes } = voteState;
+  return {
+    ...post,
+    upvotes,
+    downvotes,
+    myVote: voteState.myVote,
+    myReactionId: voteState.myReactionId,
+    replyCount: replyIds.size,
+  };
+};
+
+const makeApplyVote =
+  (mx: MatrixClient, setPosts: Dispatch<SetStateAction<FeedPost[]>>) =>
+  (roomId: string, eventId: string, vote: PostVote) => {
+    setPosts((prev) =>
+      prev.map((post) => {
+        if (post.roomId !== roomId || post.eventId !== eventId) return post;
+        const nextVoteState = togglePostVote(mx, roomId, eventId, post, vote);
+        return {
+          ...post,
+          ...nextVoteState,
+          myVote: nextVoteState.myVote,
+          myReactionId: nextVoteState.myReactionId,
+          upvotes: nextVoteState.upvotes,
+          downvotes: nextVoteState.downvotes,
+        };
+      })
+    );
+  };
+
+// Rooms hydrate from the sync store asynchronously after login; retry until
+// the client knows them (bounded), so the first load isn't empty.
+const waitForCommunityRooms = (mx: MatrixClient, attemptsLeft: number): Promise<string[]> =>
+  fetchCommunityRoomIds(mx).then((ids) => {
+    if (ids.length > 0 || attemptsLeft <= 0) return ids;
+    const { promise, resolve } = Promise.withResolvers<void>();
+    window.setTimeout(resolve, 500);
+    return promise.then(() => waitForCommunityRooms(mx, attemptsLeft - 1));
+  });
+
+const useFeedRefresh = (load: () => Promise<void>) => {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    load().finally(() => undefined);
+    const interval = window.setInterval(() => setRefreshKey((key) => key + 1), REFRESH_INTERVAL);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [load, refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((key) => key + 1), []);
+  return { refresh };
+};
 
 export const useFeedPosts = () => {
   const mx = useMatrixClient();
 
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const aliveRef = useRef(true);
-
-  const fetchCommunityRoomIds = useCallback(async (): Promise<string[]> => {
-    try {
-      const hierarchy = await mx.getRoomHierarchy(COMMUNITY_SPACE_ID);
-      return hierarchy.rooms
-        .map((room) => room.room_id)
-        .filter((roomId) => {
-          const room = mx.getRoom(roomId);
-          return Boolean(room && !room.isSpaceRoom());
-        });
-    } catch {
-      return [];
-    }
-  }, [mx]);
-
-  const getRoomPosts = useCallback(
-    async (room: Room): Promise<FeedRoomResult> => {
-      let chunk: Partial<IEvent>[] = [];
-      try {
-        const result = await mx.createMessagesRequest(
-          room.roomId,
-          null,
-          TIMELINE_LIMIT,
-          Direction.Backward
-        );
-        chunk = result.chunk;
-      } catch {
-        return [];
-      }
-
-      const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
-      return events
-        .filter(isPostEvent)
-        .filter((evt) => Boolean(evt.getId()))
-        .slice(0, MAX_POSTS_PER_ROOM)
-        .map((root) => ({
-          roomId: room.roomId,
-          eventId: root.getId() ?? '',
-          root,
-          upvotes: 0,
-          downvotes: 0,
-          myVote: undefined,
-          myReactionId: undefined,
-          replyCount: 0,
-        }));
-    },
-    [mx]
-  );
-
-  const enrichPost = useCallback(
-    async (post: FeedPost): Promise<FeedPost> => {
-      const voteState = await getPostVoteState(mx, post.roomId, post.eventId);
-
-      // Comments are replies: thread relations plus inline replies, deduped.
-      const replyIds = new Set<string>();
-      try {
-        const [threads, inlines] = await Promise.all([
-          mx
-            .relations(post.roomId, post.eventId, RelationType.Thread, undefined, {
-              limit: RELATIONS_LIMIT,
-            })
-            .catch(() => null),
-          mx
-            .relations(post.roomId, post.eventId, 'm.in_reply_to', undefined, {
-              limit: RELATIONS_LIMIT,
-            })
-            .catch(() => null),
-        ]);
-        threads?.events.forEach((evt) => {
-          const id = evt.getId();
-          if (id) replyIds.add(id);
-        });
-        inlines?.events.forEach((evt) => {
-          const id = evt.getId();
-          if (id) replyIds.add(id);
-        });
-      } catch {
-        // no replies visible
-      }
-
-      const { upvotes, downvotes } = voteState;
-      return {
-        ...post,
-        upvotes,
-        downvotes,
-        myVote: voteState.myVote,
-        myReactionId: voteState.myReactionId,
-        replyCount: replyIds.size,
-      };
-    },
-    [mx]
-  );
-
-  // Rooms hydrate from the sync store asynchronously after login; retry until
-  // the client knows them (bounded), so the first feed load isn't empty.
-  const waitForCommunityRooms = useCallback(
-    (attemptsLeft: number): Promise<string[]> =>
-      fetchCommunityRoomIds().then((ids) => {
-        if (ids.length > 0 || attemptsLeft <= 0) return ids;
-        const { promise, resolve } = Promise.withResolvers<void>();
-        window.setTimeout(resolve, 500);
-        return promise.then(() => waitForCommunityRooms(attemptsLeft - 1));
-      }),
-    [fetchCommunityRoomIds]
-  );
 
   const load = useCallback(async () => {
-    const ids = await waitForCommunityRooms(20);
-
+    setLoading(true);
+    const ids = await waitForCommunityRooms(mx, 20);
     const rooms = ids
       .map((roomId) => mx.getRoom(roomId))
-      .filter((room): room is Room => Boolean(room))
-      .slice(0, MAX_ROOMS);
+      .filter((room): room is Room => Boolean(room));
 
-    const roomPosts = await mapBatched(rooms, 5, getRoomPosts);
+    const roomPosts = await mapBatched(rooms, 5, (room) => getRoomPosts(mx, room));
     const collected = roomPosts.flat().slice(0, MAX_POSTS);
-    const enriched = await mapBatched(collected, 8, enrichPost);
+    const enriched = await mapBatched(collected, 8, (post) => enrichPost(mx, post));
 
-    if (aliveRef.current) setPosts(enriched);
-  }, [mx, waitForCommunityRooms, getRoomPosts, enrichPost]);
+    setPosts(enriched);
+    setLoading(false);
+  }, [mx]);
 
-  useEffect(() => {
-    aliveRef.current = true;
+  const { refresh } = useFeedRefresh(load);
+
+  const applyVote = useMemo(() => makeApplyVote(mx, setPosts), [mx]);
+
+  return { posts, loading, refresh, applyVote };
+};
+
+export const useRoomPosts = (roomId: string) => {
+  const mx = useMatrixClient();
+
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
     setLoading(true);
-    load().finally(() => {
-      if (aliveRef.current) setLoading(false);
-    });
-    const interval = window.setInterval(() => setRefreshKey((key) => key + 1), REFRESH_INTERVAL);
-    return () => {
-      aliveRef.current = false;
-      window.clearInterval(interval);
-    };
-  }, [load, refreshKey]);
+    const room = mx.getRoom(roomId);
+    if (!room) {
+      setLoading(false);
+      return;
+    }
+    const roomPosts = await getRoomPosts(mx, room);
+    const enriched = await mapBatched(roomPosts, 8, (post) => enrichPost(mx, post));
+    setPosts(enriched);
+    setLoading(false);
+  }, [mx, roomId]);
 
-  const refresh = useCallback(() => setRefreshKey((key) => key + 1), []);
+  const { refresh } = useFeedRefresh(load);
 
-  const applyVote = useCallback(
-    (roomId: string, eventId: string, vote: PostVote) => {
-      setPosts((prev) =>
-        prev.map((post) => {
-          if (post.roomId !== roomId || post.eventId !== eventId) return post;
-          const nextVoteState = togglePostVote(mx, roomId, eventId, post, vote);
-          const next: FeedPost = {
-            ...post,
-            ...nextVoteState,
-            myVote: nextVoteState.myVote,
-            myReactionId: nextVoteState.myReactionId,
-            upvotes: nextVoteState.upvotes,
-            downvotes: nextVoteState.downvotes,
-          };
-          return next;
-        })
-      );
-    },
-    [mx]
-  );
+  const applyVote = useMemo(() => makeApplyVote(mx, setPosts), [mx]);
 
   return { posts, loading, refresh, applyVote };
 };

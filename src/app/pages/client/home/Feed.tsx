@@ -1,137 +1,23 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { ReactNode, useCallback, useMemo, useState } from 'react';
 import { Box, Chip, Icon, IconButton, Icons, Scroll, Spinner, Text, config, toRem } from 'folds';
-import { SequenceCard } from '../../../components/sequence-card';
-import { VoteColumn } from '../../../components/post/VoteColumn';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { FeedCard } from '../../../components/post/FeedCard';
 import { useScreenSizeContext, ScreenSize } from '../../../hooks/useScreenSize';
-import { getPostPath } from '../../pathUtils';
-import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
-import { getMemberDisplayName } from '../../../utils/room';
-import { relativeTime } from '../../../utils/time';
 import { PostVote } from '../../../utils/postVote';
+import { FEED_SORTS, FeedSort, sortFeedPosts } from '../../../utils/feedSort';
 import { FeedPost, useFeedPosts } from './useFeedPosts';
 
-type FeedSort = 'recommended' | 'recent' | 'top';
-
-const SORTS: Array<{ id: FeedSort; label: string }> = [
-  { id: 'recommended', label: 'Recommended' },
-  { id: 'recent', label: 'Recent' },
-  { id: 'top', label: 'Top' },
-];
-
-const getInteractions = (post: FeedPost): number =>
-  post.upvotes + post.downvotes + post.replyCount;
-
-const getAgeDays = (post: FeedPost): number => (Date.now() - post.root.getTs()) / 86400000;
-
-const sortPosts = (posts: FeedPost[], sort: FeedSort): FeedPost[] => {
-  const sorted = [...posts];
-  if (sort === 'recent') {
-    sorted.sort((a, b) => b.root.getTs() - a.root.getTs());
-  } else if (sort === 'top') {
-    sorted.sort(
-      (a, b) => getInteractions(b) - getInteractions(a) || b.root.getTs() - a.root.getTs()
-    );
-  } else {
-    // recommended: (1 + days old) * interactions
-    sorted.sort(
-      (a, b) =>
-        (1 + getAgeDays(b)) * getInteractions(b) -
-          (1 + getAgeDays(a)) * getInteractions(a) || b.root.getTs() - a.root.getTs()
-    );
-  }
-  return sorted;
-};
-
-const getPostTitle = (post: FeedPost): string => {
-  const body = post.root.getContent()?.body;
-  const text = typeof body === 'string' ? body : '';
-  const firstLine = text.split('\n')[0] ?? '';
-  // strip common markdown decoration
-  return firstLine.replace(/[#>*_`~|]/g, '').trim() || 'Untitled post';
-};
-
-const getPostPreview = (post: FeedPost): string => {
-  const body = post.root.getContent()?.body;
-  const text = typeof body === 'string' ? body : '';
-  const lines = text.split('\n');
-  if (lines.length <= 1) return '';
-  return lines.slice(1).join(' ').replace(/[#>*_`~|]/g, '').trim();
-};
-
-type FeedCardProps = {
-  post: FeedPost;
+type FeedListProps = {
+  posts: FeedPost[];
+  loading: boolean;
   onVote: (roomId: string, eventId: string, vote: PostVote) => void;
+  toolbar?: ReactNode;
 };
-function FeedCard({ post, onVote }: FeedCardProps) {
-  const mx = useMatrixClient();
-  const navigate = useNavigate();
-  const room = mx.getRoom(post.roomId);
-
-  const handleOpen = useCallback(() => {
-    if (!room) return;
-    navigate(getPostPath(getCanonicalAliasOrRoomId(mx, room.roomId), post.eventId));
-  }, [mx, navigate, room, post.eventId]);
-
-  if (!room) return null;
-
-  const sender = post.root.getSender();
-  const authorName = sender
-    ? getMemberDisplayName(room, sender) ?? sender.split(':')[0].replace('@', '')
-    : 'unknown';
-  const title = getPostTitle(post);
-  const preview = getPostPreview(post);
-
-  return (
-    <SequenceCard
-      variant="SurfaceVariant"
-      direction="Column"
-      gap="100"
-      onClick={handleOpen}
-      style={{ cursor: 'pointer', padding: config.space.S200 }}
-    >
-      <Box gap="200" alignItems="Start">
-        <VoteColumn
-          state={post}
-          onVote={(vote) => onVote(post.roomId, post.eventId, vote)}
-        />
-        <Box direction="Column" gap="100" grow="Yes" style={{ minWidth: 0 }}>
-          <Text size="T200" priority="400" truncate>
-            r/{room.name ?? room.roomId} · {authorName} · {relativeTime(post.root.getTs())}
-          </Text>
-          <Text size="H6" truncate>
-            {title}
-          </Text>
-          {preview && (
-            <Text size="T300" priority="300" truncate>
-              {preview}
-            </Text>
-          )}
-          <Box gap="100" alignItems="Center">
-            <Icon size="100" src={Icons.Message} />
-            <Text size="T200" priority="400">
-              {post.replyCount} {post.replyCount === 1 ? 'comment' : 'comments'}
-            </Text>
-          </Box>
-        </Box>
-      </Box>
-    </SequenceCard>
-  );
-}
-
-export function Feed() {
+export function FeedList({ posts, loading, onVote, toolbar }: FeedListProps) {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
-  const { posts, loading, refresh, applyVote } = useFeedPosts();
   const [sort, setSort] = useState<FeedSort>('recommended');
 
-  const sortedPosts = useMemo(() => sortPosts(posts, sort), [posts, sort]);
-
-  const handleVote = useCallback(
-    (roomId: string, eventId: string, vote: PostVote) => applyVote(roomId, eventId, vote),
-    [applyVote]
-  );
+  const sortedPosts = useMemo(() => sortFeedPosts(posts, sort), [posts, sort]);
 
   const renderFeedContent = () => {
     if (loading && posts.length === 0) {
@@ -143,7 +29,12 @@ export function Feed() {
     }
     if (sortedPosts.length === 0) {
       return (
-        <Box direction="Column" gap="100" alignItems="Center" style={{ padding: config.space.S400 }}>
+        <Box
+          direction="Column"
+          gap="100"
+          alignItems="Center"
+          style={{ padding: config.space.S400 }}
+        >
           <Text size="T300" align="Center" priority="400">
             No posts yet.
           </Text>
@@ -154,18 +45,18 @@ export function Feed() {
       );
     }
     return sortedPosts.map((post) => (
-      <FeedCard key={`${post.roomId}:${post.eventId}`} post={post} onVote={handleVote} />
+      <FeedCard key={`${post.roomId}:${post.eventId}`} post={post} onVote={onVote} />
     ));
   };
 
   return (
-    <Box grow="Yes" direction="Column" style={{ width: '100%' }}>
+    <Box grow="Yes" direction="Column" style={{ width: '100%', minHeight: 0 }}>
       <Box
         alignItems="Center"
         gap="200"
         style={{ padding: `${config.space.S100} ${config.space.S200}`, flexShrink: 0 }}
       >
-        {SORTS.map((s) => (
+        {FEED_SORTS.map((s) => (
           <Chip
             key={s.id}
             variant={sort === s.id ? 'Primary' : 'Secondary'}
@@ -177,15 +68,7 @@ export function Feed() {
           </Chip>
         ))}
         <Box grow="Yes" />
-        <IconButton
-          size="300"
-          variant="Surface"
-          radii="Pill"
-          aria-label="Refresh feed"
-          onClick={refresh}
-        >
-          <Icon size="100" src={Icons.Reload} />
-        </IconButton>
+        {toolbar}
       </Box>
       <Scroll variant="Background" direction="Vertical" size="300" hideTrack visibility="Hover">
         <Box
@@ -201,6 +84,34 @@ export function Feed() {
         </Box>
       </Scroll>
     </Box>
+  );
+}
+
+export function Feed() {
+  const { posts, loading, refresh, applyVote } = useFeedPosts();
+
+  const handleVote = useCallback(
+    (roomId: string, eventId: string, vote: PostVote) => applyVote(roomId, eventId, vote),
+    [applyVote]
+  );
+
+  return (
+    <FeedList
+      posts={posts}
+      loading={loading}
+      onVote={handleVote}
+      toolbar={
+        <IconButton
+          size="300"
+          variant="Surface"
+          radii="Pill"
+          aria-label="Refresh feed"
+          onClick={refresh}
+        >
+          <Icon size="100" src={Icons.Reload} />
+        </IconButton>
+      }
+    />
   );
 }
 

@@ -1,50 +1,30 @@
-import React, { MouseEventHandler, forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import React, { MouseEventHandler, forwardRef, useRef, useState } from 'react';
 import { Room } from 'matrix-js-sdk';
-import {
-  Box,
-  Icon,
-  IconButton,
-  Icons,
-  Menu,
-  MenuItem,
-  PopOut,
-  RectCords,
-  Text,
-  config,
-  toRem,
-} from 'folds';
-import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
-import { useAtom, useAtomValue } from 'jotai';
+import { Box, Icon, IconButton, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRem } from 'folds';
+import { useAtomValue } from 'jotai';
 import FocusTrap from 'focus-trap-react';
-import { factoryRoomIdByAtoZ, factoryRoomIdByMessageActivity } from '../../../utils/sort';
-import { NavCategory, NavCategoryHeader, NavEmptyCenter, NavEmptyLayout } from '../../../components/nav';
 import { getHomeRoomPath } from '../../pathUtils';
 import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
-import { useHomeRooms } from './useHomeRooms';
-import { useRecentRooms } from '../recent/useRecentRooms';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { roomToParentsAtom } from '../../../state/room/roomToParents';
-import { VirtualTile } from '../../../components/virtualizer';
-import { RoomNavCategoryButton, RoomNavItem } from '../../../features/room-nav';
-import { makeNavCategoryId } from '../../../state/closedNavCategories';
+import { RoomNavItem } from '../../../features/room-nav';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
-import { useCategoryHandler } from '../../../hooks/useCategoryHandler';
-import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
 import { PageNav, PageNavHeader, PageNavContent } from '../../../components/page';
 import { useRoomsUnread } from '../../../state/hooks/unread';
 import { markAsRead } from '../../../utils/notifications';
-import { useClosedNavCategoriesAtom } from '../../../state/hooks/closedNavCategories';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import { useHomeRooms } from './useHomeRooms';
 import {
   getRoomNotificationMode,
   useRoomsNotificationPreferencesContext,
 } from '../../../hooks/useRoomsNotificationPreferences';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { Feed } from './Feed';
+import { useCommunityRoomIds } from './useCommunityRooms';
 
 type HomeMenuProps = {
   requestClose: () => void;
@@ -137,29 +117,6 @@ function HomeHeader() {
   );
 }
 
-function HomeEmpty() {
-  return (
-    <NavEmptyCenter>
-      <NavEmptyLayout
-        icon={<Icon size="600" src={Icons.Hash} />}
-        title={
-          <Text size="H5" align="Center">
-            No Rooms
-          </Text>
-        }
-        content={
-          <Text size="T300" align="Center">
-            You do not have any rooms yet.
-          </Text>
-        }
-      />
-    </NavEmptyCenter>
-  );
-}
-
-const DEFAULT_CATEGORY_ID = makeNavCategoryId('home', 'room');
-const RECENT_CATEGORY_ID = makeNavCategoryId('home', 'recent');
-
 const getRoomSpaceName = (
   mx: ReturnType<typeof useMatrixClient>,
   roomToParents: Map<string, Set<string>>,
@@ -184,157 +141,49 @@ const getRoomSpace = (
     .map((parentId) => mx.getRoom(parentId))
     .find((space): space is Room => Boolean(space?.isSpaceRoom()));
 
-function HomeRoomsList() {
+function CommunityRoomsList() {
   const mx = useMatrixClient();
-  useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const rooms = useHomeRooms();
-  const recentRooms = useRecentRooms();
+  const communityRoomIds = useCommunityRoomIds();
   const mDirects = useAtomValue(mDirectAtom);
   const roomToParents = useAtomValue(roomToParentsAtom);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
-
   const selectedRoomId = useSelectedRoom();
-  const noRoomToDisplay = rooms.length === 0 && recentRooms.length === 0;
-  const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
-  const categoryDefaultsApplied = useRef(false);
-
-  useEffect(() => {
-    if (categoryDefaultsApplied.current) return;
-    categoryDefaultsApplied.current = true;
-    if (!closedCategories.has(DEFAULT_CATEGORY_ID)) {
-      setClosedCategories({ type: 'PUT', categoryId: DEFAULT_CATEGORY_ID });
-    }
-  }, [closedCategories, setClosedCategories]);
-
-  const recentCategoryClosed = closedCategories.has(RECENT_CATEGORY_ID);
-  const roomsCategoryClosed =
-    !categoryDefaultsApplied.current || closedCategories.has(DEFAULT_CATEGORY_ID);
-
-  const sortedRecentRooms = useMemo(
-    () =>
-      recentCategoryClosed ? [] : Array.from(recentRooms).sort(factoryRoomIdByMessageActivity(mx)),
-    [mx, recentCategoryClosed, recentRooms]
-  );
-
-  const sortedRooms = useMemo(() => {
-    if (roomsCategoryClosed) return [];
-    return Array.from(rooms).sort(factoryRoomIdByAtoZ(mx));
-  }, [mx, rooms, roomsCategoryClosed]);
-
-  const recentVirtualizer = useVirtualizer({
-    count: sortedRecentRooms.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 44,
-    overscan: 10,
-  });
-
-  const virtualizer = useVirtualizer({
-    count: sortedRooms.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 38,
-    overscan: 10,
-  });
-
-  const handleCategoryClick = useCategoryHandler(setClosedCategories, (categoryId) =>
-    closedCategories.has(categoryId)
-  );
-
-  const renderRecentRoom = (vItem: VirtualItem) => {
-    const roomId = sortedRecentRooms[vItem.index];
-    const room = mx.getRoom(roomId);
-    if (!room) return null;
-
-    const direct = mDirects.has(roomId);
-    const space = getRoomSpace(mx, roomToParents, roomId);
-    return (
-      <VirtualTile virtualItem={vItem} key={roomId} ref={recentVirtualizer.measureElement}>
-        <RoomNavItem
-          room={room}
-          selected={selectedRoomId === roomId}
-          showAvatar={direct}
-          avatarRoom={space}
-          direct={direct}
-          spaceName={getRoomSpaceName(mx, roomToParents, roomId)}
-          style={{ minHeight: toRem(44) }}
-          linkPath={getHomeRoomPath(getCanonicalAliasOrRoomId(mx, roomId))}
-          notificationMode={getRoomNotificationMode(notificationPreferences, room.roomId)}
-        />
-      </VirtualTile>
-    );
-  };
 
   return (
     <PageNav>
       <HomeHeader />
-      {noRoomToDisplay && <HomeEmpty />}
-      {!noRoomToDisplay && (
-        <PageNavContent scrollRef={scrollRef}>
-          <Box direction="Column" gap="300">
-            <NavCategory>
-              <NavCategoryHeader>
-                <RoomNavCategoryButton
-                  closed={closedCategories.has(DEFAULT_CATEGORY_ID)}
-                  data-category-id={DEFAULT_CATEGORY_ID}
-                  onClick={handleCategoryClick}
-                >
-                  Rooms
-                </RoomNavCategoryButton>
-              </NavCategoryHeader>
-              <div
-                style={{
-                  position: 'relative',
-                  height: virtualizer.getTotalSize(),
-                }}
-              >
-                {virtualizer.getVirtualItems().map((vItem) => {
-                  const roomId = sortedRooms[vItem.index];
-                  const room = mx.getRoom(roomId);
-                  if (!room) return null;
-                  const selected = selectedRoomId === roomId;
-
-                  return (
-                    <VirtualTile
-                      virtualItem={vItem}
-                      key={vItem.index}
-                      ref={virtualizer.measureElement}
-                    >
-                      <RoomNavItem
-                        room={room}
-                        selected={selected}
-                        linkPath={getHomeRoomPath(getCanonicalAliasOrRoomId(mx, roomId))}
-                        notificationMode={getRoomNotificationMode(
-                          notificationPreferences,
-                          room.roomId
-                        )}
-                      />
-                    </VirtualTile>
-                  );
-                })}
-              </div>
-            </NavCategory>
-            <NavCategory>
-              <NavCategoryHeader style={{ marginBottom: config.space.S100 }}>
-                <RoomNavCategoryButton
-                  closed={recentCategoryClosed}
-                  data-category-id={RECENT_CATEGORY_ID}
-                  onClick={handleCategoryClick}
-                >
-                  All conversations
-                </RoomNavCategoryButton>
-              </NavCategoryHeader>
-              <div
-                style={{
-                  position: 'relative',
-                  height: recentVirtualizer.getTotalSize(),
-                }}
-              >
-                {recentVirtualizer.getVirtualItems().map((vItem) => renderRecentRoom(vItem))}
-              </div>
-            </NavCategory>
-          </Box>
-        </PageNavContent>
-      )}
+      <PageNavContent scrollRef={scrollRef}>
+        <Box direction="Column" gap="100">
+          {communityRoomIds.length === 0 ? (
+            <Box justifyContent="Center" style={{ padding: config.space.S300 }}>
+              <Text size="T300" priority="400" align="Center">
+                No rooms in the community yet.
+              </Text>
+            </Box>
+          ) : (
+            communityRoomIds.map((roomId) => {
+              const room = mx.getRoom(roomId);
+              if (!room) return null;
+              const direct = mDirects.has(roomId);
+              const space = getRoomSpace(mx, roomToParents, roomId);
+              return (
+                <RoomNavItem
+                  key={roomId}
+                  room={room}
+                  selected={selectedRoomId === roomId}
+                  showAvatar={direct}
+                  avatarRoom={space}
+                  direct={direct}
+                  spaceName={getRoomSpaceName(mx, roomToParents, roomId)}
+                  linkPath={getHomeRoomPath(getCanonicalAliasOrRoomId(mx, roomId))}
+                  notificationMode={getRoomNotificationMode(notificationPreferences, room.roomId)}
+                />
+              );
+            })
+          )}
+        </Box>
+      </PageNavContent>
     </PageNav>
   );
 }
@@ -343,7 +192,7 @@ export function Home() {
   const screenSize = useScreenSizeContext();
 
   // On mobile the Home page IS the feed; on desktop the feed is the home
-  // content and the nav column lists rooms for chat access.
+  // content and the nav column lists the community rooms.
   if (screenSize === ScreenSize.Mobile) {
     return (
       <PageNav>
@@ -353,5 +202,5 @@ export function Home() {
     );
   }
 
-  return <HomeRoomsList />;
+  return <CommunityRoomsList />;
 }
