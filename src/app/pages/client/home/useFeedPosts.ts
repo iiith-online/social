@@ -33,8 +33,8 @@ export type FeedPost = {
   hot: number;
 };
 
-const TIMELINE_LIMIT = 40;
-const MAX_ROOMS = 25;
+const TIMELINE_LIMIT = 100;
+const MAX_ROOMS = 60;
 const MAX_POSTS_PER_ROOM = 10;
 const MAX_POSTS = 60;
 const RELATIONS_LIMIT = 100;
@@ -62,9 +62,10 @@ const mapEvent = async (mx: MatrixClient, raw: Partial<IEvent>): Promise<MatrixE
   return decryptEvent(mx, mEvent);
 };
 
+// Relations may live in the plaintext part of encrypted events (Synapse exposes
+// m.relates_to outside the ciphertext), so scan content regardless of decryption.
 const getThreadRootIds = (events: MatrixEvent[]): Set<string> =>
   events.reduce<Set<string>>((threadIds, evt) => {
-    if (evt.isDecryptionFailure()) return threadIds;
     const relation = evt.getContent()?.['m.relates_to'];
     if (relation?.rel_type === RelationType.Thread && typeof relation.event_id === 'string') {
       threadIds.add(relation.event_id);
