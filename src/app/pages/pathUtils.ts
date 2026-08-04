@@ -9,6 +9,7 @@ import {
   HOME_CREATE_PATH,
   HOME_JOIN_PATH,
   HOME_PATH,
+  HOME_POST_PATH,
   HOME_ROOM_PATH,
   HOME_SEARCH_PATH,
   LOGIN_PATH,
@@ -88,6 +89,15 @@ export const getHomeRoomPath = (roomIdOrAlias: string, eventId?: string): string
   };
 
   return generatePath(HOME_ROOM_PATH, params);
+};
+
+export const getPostPath = (roomIdOrAlias: string, eventId: string): string => {
+  const params = {
+    roomIdOrAlias: encodeURIComponent(roomIdOrAlias),
+    eventId: encodeURIComponent(eventId),
+  };
+
+  return generatePath(HOME_POST_PATH, params);
 };
 
 export const getRecentPath = (): string => RECENT_PATH;

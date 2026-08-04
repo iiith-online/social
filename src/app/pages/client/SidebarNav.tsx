@@ -30,17 +30,16 @@ export function SidebarNav() {
             <SidebarStack>
               <HomeTab />
               <DirectTab />
+              <SearchTab />
+              <InboxTab />
             </SidebarStack>
           </Scroll>
         }
         sticky={
           <>
-            <SidebarStackSeparator />
+            <SyncStatus mx={mx} />
             <SidebarStack>
-              <SearchTab />
               <UnverifiedTab />
-              <InboxTab />
-              <SyncStatus mx={mx} />
               <SettingsTab />
             </SidebarStack>
           </>

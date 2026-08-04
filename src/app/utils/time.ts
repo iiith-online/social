@@ -84,3 +84,14 @@ export const getYesterday = () => {
   const date = dayjs(nowTs);
   return dateFor(date.year(), date.month() + 1, date.date());
 };
+
+export const relativeTime = (ts: number): string => {
+  const minutes = Math.floor((Date.now() - ts) / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return dayjs(ts).format('D MMM YYYY');
+};

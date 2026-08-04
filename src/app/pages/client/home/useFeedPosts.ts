@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Direction,
-  EventType,
   IEvent,
   MatrixClient,
   MatrixEvent,
@@ -13,19 +12,17 @@ import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { COMMUNITY_SPACE_ID } from '../../../state/communitySpace';
 import { MessageEvent } from '../../../../types/matrix/room';
+import { getPostVoteState, togglePostVote, PostVote } from '../../../utils/postVote';
 
-export const FEED_UP_KEY = '👍';
-export const FEED_DOWN_KEY = '👎';
-
-export type FeedVote = 'up' | 'down';
+export { POST_UP_KEY as FEED_UP_KEY, POST_DOWN_KEY as FEED_DOWN_KEY } from '../../../utils/postVote';
 
 export type FeedPost = {
   roomId: string;
-  threadId: string;
+  eventId: string;
   root: MatrixEvent;
   upvotes: number;
   downvotes: number;
-  myVote?: FeedVote;
+  myVote?: PostVote;
   myReactionId?: string;
   replyCount: number;
   hot: number;
@@ -33,7 +30,7 @@ export type FeedPost = {
 
 const TIMELINE_LIMIT = 100;
 const MAX_ROOMS = 60;
-const MAX_POSTS_PER_ROOM = 10;
+const MAX_POSTS_PER_ROOM = 20;
 const MAX_POSTS = 60;
 const RELATIONS_LIMIT = 100;
 const REFRESH_INTERVAL = 60_000;
@@ -60,16 +57,24 @@ const mapEvent = async (mx: MatrixClient, raw: Partial<IEvent>): Promise<MatrixE
   return decryptEvent(mx, mEvent);
 };
 
-// Relations may live in the plaintext part of encrypted events (Synapse exposes
-// m.relates_to outside the ciphertext), so scan content regardless of decryption.
-const getThreadRootIds = (events: MatrixEvent[]): Set<string> =>
-  events.reduce<Set<string>>((threadIds, evt) => {
-    const relation = evt.getContent()?.['m.relates_to'];
-    if (relation?.rel_type === RelationType.Thread && typeof relation.event_id === 'string') {
-      threadIds.add(relation.event_id);
-    }
-    return threadIds;
-  }, new Set());
+// Every message in a community room is a post. Replies (thread or inline)
+// and edits are not posts — they are comments on the message they target.
+const isPostEvent = (evt: MatrixEvent): boolean => {
+  if (evt.isDecryptionFailure()) return false;
+  const type = evt.getType();
+  if (type !== MessageEvent.RoomMessage && type !== MessageEvent.RoomMessageEncrypted) {
+    return false;
+  }
+  const content = evt.getContent();
+  if (typeof content?.body !== 'string' || !content.body.trim()) return false;
+  const relation = content['m.relates_to'];
+  if (!relation) return true;
+  return !(
+    relation.rel_type === RelationType.Thread ||
+    relation.rel_type === RelationType.Replace ||
+    Boolean(relation['m.in_reply_to'])
+  );
+};
 
 // Batched async map: runs `fn` over items in batches of `batchSize`, awaiting each batch.
 const mapBatched = <T, R>(
@@ -123,46 +128,13 @@ export const useFeedPosts = () => {
       }
 
       const events = await Promise.all(chunk.map((raw) => mapEvent(mx, raw)));
-      const threadIds = getThreadRootIds(events);
-      if (threadIds.size === 0) return [];
-
-      const inWindowRoots = new Map<string, MatrixEvent>();
-      events.forEach((evt) => {
-        if (evt.isDecryptionFailure()) return;
-        const id = evt.getId();
-        if (id && threadIds.has(id)) inWindowRoots.set(id, evt);
-      });
-
-      const rootEntries = await Promise.all(
-        Array.from(threadIds).map(async (threadId): Promise<[string, MatrixEvent | undefined]> => {
-          const inWindow = inWindowRoots.get(threadId);
-          if (inWindow) return [threadId, inWindow];
-          try {
-            const raw = await mx.fetchRoomEvent(room.roomId, threadId);
-            return [threadId, raw ? await mapEvent(mx, raw) : undefined];
-          } catch {
-            return [threadId, undefined];
-          }
-        })
-      );
-
-      return rootEntries
-        .map(([threadId, root]) => ({ threadId, root }))
-        .filter(
-          (entry): entry is { threadId: string; root: MatrixEvent } => {
-            if (!entry.root || entry.root.isDecryptionFailure()) return false;
-            const type = entry.root.getType();
-            if (type !== MessageEvent.RoomMessage && type !== MessageEvent.RoomMessageEncrypted) {
-              return false;
-            }
-            const content = entry.root.getContent();
-            return typeof content?.body === 'string' && Boolean(content.body.trim());
-          }
-        )
+      return events
+        .filter(isPostEvent)
+        .filter((evt) => Boolean(evt.getId()))
         .slice(0, MAX_POSTS_PER_ROOM)
-        .map(({ threadId, root }) => ({
+        .map((root) => ({
           roomId: room.roomId,
-          threadId,
+          eventId: root.getId() ?? '',
           root,
           upvotes: 0,
           downvotes: 0,
@@ -177,61 +149,43 @@ export const useFeedPosts = () => {
 
   const enrichPost = useCallback(
     async (post: FeedPost): Promise<FeedPost> => {
-      const me = mx.getSafeUserId();
-      let upvotes = 0;
-      let downvotes = 0;
-      let myVote: FeedVote | undefined;
-      let myReactionId: string | undefined;
+      const voteState = await getPostVoteState(mx, post.roomId, post.eventId);
 
+      // Comments are replies: thread relations plus inline replies, deduped.
+      const replyIds = new Set<string>();
       try {
-        const reactions = await mx.relations(
-          post.roomId,
-          post.threadId,
-          RelationType.Annotation,
-          MessageEvent.Reaction
-        );
-        reactions.events.forEach((evt) => {
-          const key = evt.getContent()?.['m.relates_to']?.key;
-          const sender = evt.getSender();
-          if (key === FEED_UP_KEY) {
-            upvotes += 1;
-            if (sender === me) {
-              myVote = 'up';
-              myReactionId = evt.getId();
-            }
-          } else if (key === FEED_DOWN_KEY) {
-            downvotes += 1;
-            if (sender === me) {
-              myVote = 'down';
-              myReactionId = evt.getId();
-            }
-          }
+        const [threads, inlines] = await Promise.all([
+          mx
+            .relations(post.roomId, post.eventId, RelationType.Thread, undefined, {
+              limit: RELATIONS_LIMIT,
+            })
+            .catch(() => null),
+          mx
+            .relations(post.roomId, post.eventId, 'm.in_reply_to', undefined, {
+              limit: RELATIONS_LIMIT,
+            })
+            .catch(() => null),
+        ]);
+        threads?.events.forEach((evt) => {
+          const id = evt.getId();
+          if (id) replyIds.add(id);
         });
-      } catch {
-        // no reactions visible
-      }
-
-      let replyCount = 0;
-      try {
-        const replies = await mx.relations(
-          post.roomId,
-          post.threadId,
-          RelationType.Thread,
-          undefined,
-          { limit: RELATIONS_LIMIT }
-        );
-        replyCount = replies.events.length;
+        inlines?.events.forEach((evt) => {
+          const id = evt.getId();
+          if (id) replyIds.add(id);
+        });
       } catch {
         // no replies visible
       }
 
+      const { upvotes, downvotes } = voteState;
       return {
         ...post,
         upvotes,
         downvotes,
-        myVote,
-        myReactionId,
-        replyCount,
+        myVote: voteState.myVote,
+        myReactionId: voteState.myReactionId,
+        replyCount: replyIds.size,
         hot: hotScore(upvotes - downvotes, post.root.getTs()),
       };
     },
@@ -282,46 +236,18 @@ export const useFeedPosts = () => {
   const refresh = useCallback(() => setRefreshKey((key) => key + 1), []);
 
   const applyVote = useCallback(
-    (roomId: string, threadId: string, vote: FeedVote) => {
+    (roomId: string, eventId: string, vote: PostVote) => {
       setPosts((prev) =>
         prev.map((post) => {
-          if (post.roomId !== roomId || post.threadId !== threadId) return post;
-
-          if (post.myVote === vote) {
-            if (post.myReactionId) mx.redactEvent(roomId, post.myReactionId);
-            const next: FeedPost = {
-              ...post,
-              myVote: undefined,
-              myReactionId: undefined,
-              upvotes: Math.max(0, post.upvotes - (vote === 'up' ? 1 : 0)),
-              downvotes: Math.max(0, post.downvotes - (vote === 'down' ? 1 : 0)),
-            };
-            next.hot = hotScore(getPostScore(next), post.root.getTs());
-            return next;
-          }
-
-          if (post.myVote && post.myReactionId) mx.redactEvent(roomId, post.myReactionId);
-          mx.sendEvent(roomId, EventType.Reaction, {
-            'm.relates_to': {
-              rel_type: RelationType.Annotation,
-              event_id: threadId,
-              key: vote === 'up' ? FEED_UP_KEY : FEED_DOWN_KEY,
-            },
-          });
-          const wasUp = post.myVote === 'up';
-          const wasDown = post.myVote === 'down';
+          if (post.roomId !== roomId || post.eventId !== eventId) return post;
+          const nextVoteState = togglePostVote(mx, roomId, eventId, post, vote);
           const next: FeedPost = {
             ...post,
-            myVote: vote,
-            myReactionId: undefined, // unknown until next refresh
-            upvotes: Math.max(
-              0,
-              post.upvotes + (vote === 'up' ? 1 : 0) - (wasUp ? 1 : 0)
-            ),
-            downvotes: Math.max(
-              0,
-              post.downvotes + (vote === 'down' ? 1 : 0) - (wasDown ? 1 : 0)
-            ),
+            ...nextVoteState,
+            myVote: nextVoteState.myVote,
+            myReactionId: nextVoteState.myReactionId,
+            upvotes: nextVoteState.upvotes,
+            downvotes: nextVoteState.downvotes,
           };
           next.hot = hotScore(getPostScore(next), post.root.getTs());
           return next;
