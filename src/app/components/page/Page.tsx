@@ -1,4 +1,9 @@
-import React, { ComponentProps, MutableRefObject, ReactNode } from 'react';
+import React, {
+  ComponentProps,
+  CSSProperties,
+  MutableRefObject,
+  ReactNode,
+} from 'react';
 import { Box, Header, Line, Scroll, Text, as } from 'folds';
 import classNames from 'classnames';
 import { ContainerColor } from '../../styles/ContainerColor.css';
@@ -31,7 +36,11 @@ export function PageRoot({ nav, children }: PageRootProps) {
 type ClientDrawerLayoutProps = {
   children: ReactNode;
 };
-export function PageNav({ size, children }: ClientDrawerLayoutProps & css.PageNavVariants) {
+export function PageNav({
+  size,
+  children,
+  style,
+}: ClientDrawerLayoutProps & css.PageNavVariants & { style?: CSSProperties }) {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
 
@@ -41,6 +50,7 @@ export function PageNav({ size, children }: ClientDrawerLayoutProps & css.PageNa
       className={css.PageNav({ size })}
       shrink={isMobile ? 'Yes' : 'No'}
       data-ui-option-page-nav
+      style={style}
     >
       <Box grow="Yes" direction="Column">
         {children}
