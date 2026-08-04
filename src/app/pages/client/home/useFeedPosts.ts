@@ -97,6 +97,7 @@ export const useFeedPosts = () => {
   const fetchCommunityRoomIds = useCallback(async (): Promise<string[]> => {
     try {
       const hierarchy = await mx.getRoomHierarchy(COMMUNITY_SPACE_ID);
+      console.log('[feed-debug] hierarchy raw:', hierarchy.rooms.length, hierarchy.rooms.map((r) => r.room_id.slice(-8)));
       return hierarchy.rooms
         .map((room) => room.room_id)
         .filter((roomId) => {
@@ -251,6 +252,7 @@ export const useFeedPosts = () => {
 
   const load = useCallback(async () => {
     const ids = await fetchCommunityRoomIds();
+    console.log('[feed-debug] hierarchy ids:', ids.length, ids);
 
     const rooms = ids
       .map((roomId) => mx.getRoom(roomId))
