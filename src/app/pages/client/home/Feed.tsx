@@ -10,26 +10,36 @@ import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
 import { getMemberDisplayName } from '../../../utils/room';
 import { relativeTime } from '../../../utils/time';
 import { PostVote } from '../../../utils/postVote';
-import { FeedPost, getPostScore, useFeedPosts } from './useFeedPosts';
+import { FeedPost, useFeedPosts } from './useFeedPosts';
 
-type FeedSort = 'hot' | 'new' | 'top';
+type FeedSort = 'recommended' | 'recent' | 'top';
 
 const SORTS: Array<{ id: FeedSort; label: string }> = [
-  { id: 'hot', label: 'Hot' },
-  { id: 'new', label: 'New' },
+  { id: 'recommended', label: 'Recommended' },
+  { id: 'recent', label: 'Recent' },
   { id: 'top', label: 'Top' },
 ];
 
+const getInteractions = (post: FeedPost): number =>
+  post.upvotes + post.downvotes + post.replyCount;
+
+const getAgeDays = (post: FeedPost): number => (Date.now() - post.root.getTs()) / 86400000;
+
 const sortPosts = (posts: FeedPost[], sort: FeedSort): FeedPost[] => {
   const sorted = [...posts];
-  if (sort === 'new') {
+  if (sort === 'recent') {
     sorted.sort((a, b) => b.root.getTs() - a.root.getTs());
   } else if (sort === 'top') {
     sorted.sort(
-      (a, b) => getPostScore(b) - getPostScore(a) || b.root.getTs() - a.root.getTs()
+      (a, b) => getInteractions(b) - getInteractions(a) || b.root.getTs() - a.root.getTs()
     );
   } else {
-    sorted.sort((a, b) => b.hot - a.hot);
+    // recommended: (1 + days old) * interactions
+    sorted.sort(
+      (a, b) =>
+        (1 + getAgeDays(b)) * getInteractions(b) -
+          (1 + getAgeDays(a)) * getInteractions(a) || b.root.getTs() - a.root.getTs()
+    );
   }
   return sorted;
 };
@@ -114,7 +124,7 @@ export function Feed() {
   const screenSize = useScreenSizeContext();
   const isMobile = screenSize === ScreenSize.Mobile;
   const { posts, loading, refresh, applyVote } = useFeedPosts();
-  const [sort, setSort] = useState<FeedSort>('hot');
+  const [sort, setSort] = useState<FeedSort>('recommended');
 
   const sortedPosts = useMemo(() => sortPosts(posts, sort), [posts, sort]);
 

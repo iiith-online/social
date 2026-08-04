@@ -25,7 +25,6 @@ export type FeedPost = {
   myVote?: PostVote;
   myReactionId?: string;
   replyCount: number;
-  hot: number;
 };
 
 const TIMELINE_LIMIT = 100;
@@ -34,12 +33,6 @@ const MAX_POSTS_PER_ROOM = 20;
 const MAX_POSTS = 60;
 const RELATIONS_LIMIT = 100;
 const REFRESH_INTERVAL = 60_000;
-
-export const getPostScore = (post: FeedPost): number => post.upvotes - post.downvotes;
-
-// Reddit hot ranking: log-scaled score plus recency in 12.5-hour half-lives.
-export const hotScore = (score: number, ts: number): number =>
-  Math.log10(Math.max(Math.abs(score), 1)) * Math.sign(score) + ts / 45000;
 
 const decryptEvent = async (mx: MatrixClient, mEvent: MatrixEvent) => {
   if (mEvent.isEncrypted() && mx.getCrypto()) {
@@ -141,7 +134,6 @@ export const useFeedPosts = () => {
           myVote: undefined,
           myReactionId: undefined,
           replyCount: 0,
-          hot: 0,
         }));
     },
     [mx]
@@ -186,7 +178,6 @@ export const useFeedPosts = () => {
         myVote: voteState.myVote,
         myReactionId: voteState.myReactionId,
         replyCount: replyIds.size,
-        hot: hotScore(upvotes - downvotes, post.root.getTs()),
       };
     },
     [mx]
@@ -249,7 +240,6 @@ export const useFeedPosts = () => {
             upvotes: nextVoteState.upvotes,
             downvotes: nextVoteState.downvotes,
           };
-          next.hot = hotScore(getPostScore(next), post.root.getTs());
           return next;
         })
       );
