@@ -17,7 +17,7 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { General, Options, Source } from './general';
+import { About, General, Options } from './general';
 import {
   Page,
   PageContent,
@@ -47,7 +47,7 @@ export enum SettingsPages {
   NotificationPage,
   DevicesPage,
   OptionsPage,
-  SourcePage,
+  AboutPage,
 }
 
 type SettingsMenuItem = {
@@ -92,8 +92,8 @@ const useSettingsUtilityItems = (): SettingsMenuItem[] =>
         icon: Icons.Setting,
       },
       {
-        page: SettingsPages.SourcePage,
-        name: 'Source',
+        page: SettingsPages.AboutPage,
+        name: 'About',
         icon: Icons.Info,
       },
     ],
@@ -304,9 +304,9 @@ export function Settings({ initialPage, requestClose }: SettingsProps) {
           <Options />
         </StandalonePage>
       )}
-      {activePage === SettingsPages.SourcePage && (
-        <StandalonePage title="Source" requestClose={handlePageRequestClose}>
-          <Source />
+      {activePage === SettingsPages.AboutPage && (
+        <StandalonePage title="About" requestClose={handlePageRequestClose}>
+          <About />
         </StandalonePage>
       )}
     </PageRoot>

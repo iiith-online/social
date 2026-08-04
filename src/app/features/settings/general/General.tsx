@@ -588,11 +588,43 @@ export function Options() {
   );
 }
 
-export function Source() {
+export function About() {
   return (
     <SequenceCard className={SequenceCardStyle} variant="SurfaceVariant" direction="Column">
       <SettingTile
-        title="Repository"
+        title="IIIT online"
+        description={
+          <a href="https://iiith.online/" rel="noreferrer noopener" target="_blank">
+            iiith.online
+          </a>
+        }
+      />
+      <SettingTile
+        title="IIIT Matrix"
+        description={
+          <a href="https://matrix.iiith.online/" rel="noreferrer noopener" target="_blank">
+            matrix.iiith.online
+          </a>
+        }
+      />
+      <SettingTile
+        title="IIIT Social"
+        description={
+          <a href="https://social.iiith.online/" rel="noreferrer noopener" target="_blank">
+            social.iiith.online
+          </a>
+        }
+      />
+      <SettingTile
+        title="This app is a fork of Cinny"
+        description={
+          <a href="https://github.com/cinnyapp/cinny" rel="noreferrer noopener" target="_blank">
+            github.com/cinnyapp/cinny
+          </a>
+        }
+      />
+      <SettingTile
+        title="Source code"
         description={
           <a
             href="https://github.com/Iiiith-online/social"
