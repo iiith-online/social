@@ -11,6 +11,7 @@ import {
   collectInlineComments,
   enrichPost,
   FeedPost,
+  getCommunitySpaceName,
   getPinnedEventIds,
   isPostEvent,
   mapBatched,
@@ -22,8 +23,8 @@ const PROFILE_PAGES_PER_ROOM = 3;
 const PROFILE_MAX_POSTS = 100;
 
 const loadUserPosts = async (mx: MatrixClient, userId: string): Promise<FeedPost[]> => {
-  const ids = await waitForCommunityRooms(mx, 20);
-  const rooms = ids
+  const data = await waitForCommunityRooms(mx, 20);
+  const rooms = data.roomIds
     .map((roomId) => mx.getRoom(roomId))
     .filter((room): room is Room => Boolean(room));
 
@@ -37,6 +38,7 @@ const loadUserPosts = async (mx: MatrixClient, userId: string): Promise<FeedPost
     return pageRoomHistory(mx, room, from).then((page) => {
       collectInlineComments(room.roomId, page.events, inlineCounts, counted);
       const pinned = getPinnedEventIds(room);
+      const spaceName = data.spaceNames.get(room.roomId) ?? getCommunitySpaceName(mx);
       page.events.forEach((evt) => {
         if (!isPostEvent(evt) || evt.getSender() !== userId) return;
         const id = evt.getId();
@@ -52,6 +54,7 @@ const loadUserPosts = async (mx: MatrixClient, userId: string): Promise<FeedPost
           myReactionId: undefined,
           replyCount: 0,
           pinned: pinned.has(id),
+          spaceName,
         });
       });
       if (!page.nextToken) return Promise.resolve();

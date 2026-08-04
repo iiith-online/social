@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {
   Direction,
+  HierarchyRoom,
   IEvent,
   MatrixClient,
   MatrixEvent,
@@ -35,6 +36,12 @@ export type FeedPost = {
   myReactionId?: string;
   replyCount: number;
   pinned: boolean;
+  spaceName: string;
+};
+
+export type CommunityData = {
+  roomIds: string[];
+  spaceNames: Map<string, string>;
 };
 
 const PAGE_SIZE = 100;
@@ -134,38 +141,56 @@ export const mapBatched = <T, R>(
 
 const HIERARCHY_PAGE_SIZE = 100;
 
-// The hierarchy API is paginated (server default page is 10 rooms), so walk
-// `from` tokens until exhausted, then filter to joined non-space rooms.
-const fetchHierarchyPage = (
-  mx: MatrixClient,
-  from: string | undefined,
-  acc: string[]
-): Promise<string[]> =>
-  mx
-    .getRoomHierarchy(COMMUNITY_SPACE_ID, HIERARCHY_PAGE_SIZE, undefined, false, from)
-    .then((hierarchy) => {
-      const roomIds = hierarchy.rooms
-        .filter((room) => !room.room_type)
-        .map((room) => room.room_id);
-      const collected = acc.concat(roomIds);
-      // The SDK's IRoomHierarchy types the pagination token as `next_batch`,
-      // but the API (and runtime response) uses `next_token`.
-      const nextToken =
-        'next_token' in hierarchy && typeof hierarchy.next_token === 'string'
-          ? hierarchy.next_token
-          : undefined;
-      if (!nextToken) return collected;
-      return fetchHierarchyPage(mx, nextToken, collected);
-    })
-    .catch(() => acc);
+export const getCommunitySpaceName = (mx: MatrixClient): string =>
+  mx.getRoom(COMMUNITY_SPACE_ID)?.name ?? 'IIIT social';
 
-export const fetchCommunityRoomIds = async (mx: MatrixClient): Promise<string[]> => {
-  const roomIds = await fetchHierarchyPage(mx, undefined, []);
-  return roomIds.filter((roomId) => {
-    const room = mx.getRoom(roomId);
-    return Boolean(room && !room.isSpaceRoom());
-  });
+// Walks every page of the space hierarchy (server default page is 10 rooms).
+const fetchHierarchyEntries = async (mx: MatrixClient): Promise<HierarchyRoom[]> => {
+  const collect = (
+    from: string | undefined,
+    acc: HierarchyRoom[]
+  ): Promise<HierarchyRoom[]> =>
+    mx
+      .getRoomHierarchy(COMMUNITY_SPACE_ID, HIERARCHY_PAGE_SIZE, undefined, false, from)
+      .then((hierarchy) => {
+        const entries = acc.concat(hierarchy.rooms);
+        // The SDK's IRoomHierarchy types the pagination token as `next_batch`,
+        // but the API (and runtime response) uses `next_token`.
+        const next =
+          'next_token' in hierarchy && typeof hierarchy.next_token === 'string'
+            ? hierarchy.next_token
+            : undefined;
+        if (!next) return entries;
+        return collect(next, entries);
+      })
+      .catch(() => acc);
+  return collect(undefined, []);
 };
+
+// Joined non-space rooms under the community space, plus each room's parent
+// space name (built from the hierarchy's m.space.child state events).
+export const fetchCommunityData = async (mx: MatrixClient): Promise<CommunityData> => {
+  const entries = await fetchHierarchyEntries(mx);
+  const rootName = getCommunitySpaceName(mx);
+  const spaceNames = new Map<string, string>();
+  entries.forEach((entry) => {
+    if (!entry.room_type) return;
+    entry.children_state.forEach((child) => {
+      if (child.state_key) spaceNames.set(child.state_key, entry.name || rootName);
+    });
+  });
+  const roomIds = entries
+    .filter((entry) => !entry.room_type)
+    .map((entry) => entry.room_id)
+    .filter((roomId) => {
+      const room = mx.getRoom(roomId);
+      return Boolean(room && !room.isSpaceRoom());
+    });
+  return { roomIds, spaceNames };
+};
+
+export const fetchCommunityRoomIds = async (mx: MatrixClient): Promise<string[]> =>
+  fetchCommunityData(mx).then((data) => data.roomIds);
 
 // Fetches one page of room history (newest first). `fromToken` is the
 // `end` token of the previous page, or null for the newest page.
@@ -188,7 +213,12 @@ export const pageRoomHistory = async (
   }
 };
 
-const toFeedPost = (roomId: string, root: MatrixEvent, pinned: Set<string>): FeedPost => ({
+const toFeedPost = (
+  roomId: string,
+  root: MatrixEvent,
+  pinned: Set<string>,
+  spaceName: string
+): FeedPost => ({
   roomId,
   eventId: root.getId() ?? '',
   root,
@@ -198,22 +228,25 @@ const toFeedPost = (roomId: string, root: MatrixEvent, pinned: Set<string>): Fee
   myReactionId: undefined,
   replyCount: 0,
   pinned: pinned.has(root.getId() ?? ''),
+  spaceName,
 });
 
 export const getRoomPosts = async (
   mx: MatrixClient,
-  room: Room
+  room: Room,
+  spaceNames?: Map<string, string>
 ): Promise<{ posts: FeedPost[]; inlineComments: Map<string, number> }> => {
   const { events } = await pageRoomHistory(mx, room, null);
   const inlineComments = new Map<string, number>();
   collectInlineComments(room.roomId, events, inlineComments, new Set());
   const pinned = getPinnedEventIds(room);
+  const spaceName = spaceNames?.get(room.roomId) ?? getCommunitySpaceName(mx);
 
   return {
     posts: events
       .filter(isPostEvent)
       .filter((evt) => Boolean(evt.getId()))
-      .map((root) => toFeedPost(room.roomId, root, pinned)),
+      .map((root) => toFeedPost(room.roomId, root, pinned, spaceName)),
     inlineComments,
   };
 };
@@ -267,9 +300,12 @@ export const enrichPost = async (
 
 // Rooms hydrate from the sync store asynchronously after login; retry until
 // the client knows them (bounded), so the first load isn't empty.
-export const waitForCommunityRooms = (mx: MatrixClient, attemptsLeft: number): Promise<string[]> =>
-  fetchCommunityRoomIds(mx).then((ids) => {
-    if (ids.length > 0 || attemptsLeft <= 0) return ids;
+export const waitForCommunityRooms = (
+  mx: MatrixClient,
+  attemptsLeft: number
+): Promise<CommunityData> =>
+  fetchCommunityData(mx).then((data) => {
+    if (data.roomIds.length > 0 || attemptsLeft <= 0) return data;
     const { promise, resolve } = Promise.withResolvers<void>();
     window.setTimeout(resolve, 500);
     return promise.then(() => waitForCommunityRooms(mx, attemptsLeft - 1));
@@ -321,11 +357,13 @@ export const useFeedPosts = () => {
   const tokensRef = useRef<Map<string, string | null>>(new Map());
   const inlineCountsRef = useRef<Map<string, number>>(new Map());
   const countedRepliesRef = useRef<Set<string>>(new Set());
+  const spaceNamesRef = useRef<Map<string, string>>(new Map());
   const busyRef = useRef(false);
 
   const getRooms = useCallback(async () => {
-    const ids = await waitForCommunityRooms(mx, 20);
-    return ids
+    const data = await waitForCommunityRooms(mx, 20);
+    spaceNamesRef.current = data.spaceNames;
+    return data.roomIds
       .map((roomId) => mx.getRoom(roomId))
       .filter((room): room is Room => Boolean(room));
   }, [mx]);
@@ -343,6 +381,8 @@ export const useFeedPosts = () => {
           events: page.events,
           nextToken: page.nextToken,
           pinned: getPinnedEventIds(room),
+          spaceName:
+            spaceNamesRef.current.get(room.roomId) ?? getCommunitySpaceName(mx),
         };
       });
 
@@ -359,7 +399,7 @@ export const useFeedPosts = () => {
           if (!isPostEvent(evt)) return;
           const id = evt.getId();
           if (!id) return;
-          fresh.push(toFeedPost(page.roomId, evt, page.pinned));
+          fresh.push(toFeedPost(page.roomId, evt, page.pinned, page.spaceName));
         });
       });
 
@@ -428,7 +468,12 @@ export const useRoomPosts = (roomId: string) => {
       setLoading(false);
       return;
     }
-    const { posts: roomPosts, inlineComments } = await getRoomPosts(mx, room);
+    const data = await waitForCommunityRooms(mx, 20);
+    const { posts: roomPosts, inlineComments } = await getRoomPosts(
+      mx,
+      room,
+      data.spaceNames
+    );
     const enriched = await mapBatched(roomPosts, 8, (post) =>
       enrichPost(mx, post, inlineComments)
     );

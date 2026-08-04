@@ -5,6 +5,7 @@ import {
   collectInlineComments,
   enrichPost,
   FeedPost,
+  getCommunitySpaceName,
   getPinnedEventIds,
   isPostEvent,
   mapBatched,
@@ -19,8 +20,8 @@ const DEBOUNCE_MS = 400;
 // E2EE rooms cannot be indexed server-side, so search pages room history
 // client-side and matches post title/body against the query.
 const runSearch = async (mx: MatrixClient, term: string): Promise<FeedPost[]> => {
-  const ids = await waitForCommunityRooms(mx, 20);
-  const rooms = ids
+  const data = await waitForCommunityRooms(mx, 20);
+  const rooms = data.roomIds
     .map((roomId) => mx.getRoom(roomId))
     .filter((room): room is Room => Boolean(room));
 
@@ -34,6 +35,7 @@ const runSearch = async (mx: MatrixClient, term: string): Promise<FeedPost[]> =>
     return pageRoomHistory(mx, room, from).then((page) => {
       collectInlineComments(room.roomId, page.events, inlineCounts, counted);
       const pinned = getPinnedEventIds(room);
+      const spaceName = data.spaceNames.get(room.roomId) ?? getCommunitySpaceName(mx);
       page.events.forEach((evt) => {
         if (!isPostEvent(evt) || matches.length >= SEARCH_MAX_RESULTS) return;
         const id = evt.getId();
@@ -53,6 +55,7 @@ const runSearch = async (mx: MatrixClient, term: string): Promise<FeedPost[]> =>
           myReactionId: undefined,
           replyCount: 0,
           pinned: pinned.has(id),
+          spaceName,
         });
       });
       if (!page.nextToken) return Promise.resolve();

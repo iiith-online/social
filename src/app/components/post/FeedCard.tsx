@@ -55,7 +55,7 @@ export function FeedCard({ post, onVote }: FeedCardProps) {
           <Box gap="100" alignItems="Center">
             <Box grow="Yes" style={{ minWidth: 0 }}>
               <Text size="T200" priority="400" truncate>
-                r/{room.name ?? room.roomId} ·{' '}
+                s/{post.spaceName} · r/{room.name ?? room.roomId} ·{' '}
                 <button
                   type="button"
                   onClick={handleOpenProfile}

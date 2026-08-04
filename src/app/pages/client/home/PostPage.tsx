@@ -28,7 +28,7 @@ import { useRoom } from '../../../hooks/useRoom';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useRoomEvent } from '../../../hooks/useRoomEvent';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
-import { getEventRelation, getInReplyToEventId, mapBatched } from './useFeedPosts';
+import { getEventRelation, getInReplyToEventId, mapBatched, fetchCommunityData, getCommunitySpaceName } from './useFeedPosts';
 import { useRoomName } from '../../../hooks/useRoomMeta';
 import { getMemberDisplayName } from '../../../utils/room';
 import { getReactCustomHtmlParser, LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
@@ -185,6 +185,13 @@ export function PostPage() {
   const [commentVotes, setCommentVotes] = useState<Map<string, PostVoteState>>(new Map());
   const [commentSort, setCommentSort] = useState<CommentSort>('top');
   const [voteState, setVoteState] = useState<PostVoteState>({ upvotes: 0, downvotes: 0 });
+  const [spaceName, setSpaceName] = useState('');
+
+  useEffect(() => {
+    fetchCommunityData(mx).then((data) =>
+      setSpaceName(data.spaceNames.get(room.roomId) ?? getCommunitySpaceName(mx))
+    );
+  }, [mx, room.roomId]);
 
   const parserOptions = useMemo(
     () => getReactCustomHtmlParser(mx, room.roomId, { linkifyOpts: LINKIFY_OPTS }),
@@ -377,7 +384,7 @@ export function PostPage() {
                   <Box gap="100" alignItems="Center">
                     <Box grow="Yes" style={{ minWidth: 0 }}>
                       <Text size="T200" priority="400" truncate>
-                        r/{roomName} ·{' '}
+                        s/{spaceName} · r/{roomName} ·{' '}
                         <button
                           type="button"
                           onClick={handleOpenProfile}
